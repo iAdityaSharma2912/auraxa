@@ -26,6 +26,16 @@ export default function ShareCard({ analysis, onClose }: ShareCardProps) {
         backgroundColor: "#07070c",
         useCORS: true,
       } as any);
+      if (navigator.canShare) {
+  canvas.toBlob(async (blob) => {
+    if (!blob) return;
+    const file = new File([blob], `auraxa-${analysis.id.slice(0,8)}.png`, { type: "image/png" });
+    if (navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "My Auraxa Score", url: window.location.href });
+      return;
+    }
+  }, "image/png");
+}
       const link = document.createElement("a");
       link.download = `auraxa-${analysis.id.slice(0, 8)}.png`;
       link.href = canvas.toDataURL("image/png");

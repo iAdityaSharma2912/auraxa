@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
 
+from app.api import advisor
+
 from app.core.config import settings
 from app.core.database import create_db_tables
 from app.api import auth, analyze, advisor, reports, users, subscriptions
@@ -61,6 +63,8 @@ app.include_router(palm.router,          prefix="/api/palm",          tags=["Pal
 app.include_router(admin.router,         prefix="/api/admin",         tags=["Admin"])
 app.include_router(demo.router,                                        tags=["Demo"])
 app.include_router(daily_insight.router, prefix="/api", tags=["daily-insight"])
+app.include_router(advisor.router, prefix="/api/advisor", tags=["Advisor"])
+
 
 # ─── WebSocket ────────────────────────────────────────────────
 app.include_router(ws.router, tags=["WebSocket"])

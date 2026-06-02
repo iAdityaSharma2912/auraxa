@@ -1,25 +1,24 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { signOut } from "@/lib/auth";
-import TokenSync from "@/components/shared/TokenSync";
 import Logo from "@/components/ui/Logo";
+import { NavItem, MobileNavItem } from "@/components/ui/NavItem";
+import TokenSync from "@/components/shared/TokenSync";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: "▦", desc: "Overview" },
-  { href: "/analyze",   label: "Analyse",   icon: "◫", desc: "New reading" },
-  { href: "/reports",   label: "Reports",   icon: "▤", desc: "Past analyses" },
-  { href: "/astrology", label: "Astrology", icon: "◈", desc: "Stars & palm" },
-  { href: "/upgrade",   label: "Upgrade",   icon: "▲", desc: "Premium plans" },
+  { href: "/dashboard", icon: "▦", label: "Dashboard", desc: "Overview" },
+  { href: "/analyze",   icon: "◫", label: "Analyse",   desc: "New reading" },
+  { href: "/reports",   icon: "▤", label: "Reports",   desc: "Past analyses" },
+  { href: "/astrology", icon: "◈", label: "Astrology", desc: "Stars & palm" },
+  { href: "/upgrade",   icon: "▲", label: "Upgrade",   desc: "Premium plans" },
 ];
 
 async function SignOutButton() {
   return (
     <form action={async () => { "use server"; await signOut({ redirectTo: "/" }); }}>
-      <button type="submit"
-        className="w-full flex items-center gap-3 px-4 py-2.5 rounded text-sm transition-all label hover:text-accent"
-        style={{ color: "#5c5e62" }}>
-        ↗ Sign Out
+      <button type="submit" className="w-full flex items-center gap-2 px-4 py-2.5 rounded transition-all label"
+        style={{ color: "#9b9aa3", fontSize: "10px" }}>
+        ↗ SIGN OUT
       </button>
     </form>
   );
@@ -29,82 +28,99 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await auth();
   if (!session) redirect("/login");
 
-  const isAdmin = process.env.ADMIN_EMAILS?.split(",").map(e => e.trim().toLowerCase())
+  const isAdmin = process.env.ADMIN_EMAILS?.split(",")
+    .map(e => e.trim().toLowerCase())
     .includes(session.user?.email?.toLowerCase() ?? "");
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen" style={{ background: "var(--bg)" }}>
       <TokenSync />
 
-      {/* Sidebar */}
-      <aside className="w-64 fixed top-0 left-0 h-full flex flex-col z-40 mobile-hidden"
-        style={{ background: "var(--surface)", borderRight: "1px solid var(--line)" }}>
+      {/* ── Desktop sidebar — hidden below md ── */}
+      <aside
+        className="hidden md:flex w-64 fixed top-0 left-0 h-full flex-col z-40"
+        style={{ background: "var(--bg)", borderRight: "1px solid var(--line)" }}
+      >
         <div className="px-5 py-6" style={{ borderBottom: "1px solid var(--line)" }}>
           <Logo size="sm" />
         </div>
 
-        <nav className="flex-1 px-3 py-5 space-y-1 overflow-y-auto no-scrollbar">
-          <p className="label px-4 mb-3">Navigation</p>
-          {NAV.map(item => (
-            <Link key={item.href} href={item.href}
-              className="flex items-center gap-3 px-4 py-3 rounded transition-all group hover:bg-surface-alt"
-              style={{ color: "#5c5e62" }}>
-              <div className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0 transition-all group-hover:scale-105"
-                style={{ background: "var(--surface-alt)", border: "1px solid var(--line)" }}>
-                <span style={{ fontSize: "14px", color: "#3457d5" }}>{item.icon}</span>
-              </div>
-              <div className="min-w-0">
-                <p className="font-display text-xs font-semibold tracking-wide transition-colors group-hover:text-text" style={{ color: "#171a20" }}>{item.label}</p>
-                <p className="text-[10px] mt-0.5" style={{ color: "#5c5e62" }}>{item.desc}</p>
-              </div>
-            </Link>
-          ))}
+        <nav className="flex-1 px-3 py-5 space-y-0.5 overflow-y-auto no-scrollbar">
+          <p className="label px-4 mb-3" style={{ fontSize: "9px" }}>Navigation</p>
+          {NAV.map(item => <NavItem key={item.href} {...item} />)}
           {isAdmin && (
             <>
               <div className="my-3" style={{ borderTop: "1px solid var(--line)" }} />
-              <Link href="/admin" className="flex items-center gap-3 px-4 py-3 rounded transition-all group hover:bg-surface-alt" style={{ color: "#5c5e62" }}>
-                <div className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0" style={{ background: "rgba(204,0,0,.06)", border: "1px solid rgba(204,0,0,.15)" }}>
-                  <span style={{ fontSize: "14px", color: "#cc0000" }}>●</span>
-                </div>
-                <div>
-                  <p className="font-display text-xs font-semibold" style={{ color: "#171a20" }}>Admin</p>
-                  <p className="text-[10px] mt-0.5" style={{ color: "#5c5e62" }}>Control panel</p>
-                </div>
-              </Link>
+              <NavItem href="/admin" icon="●" label="Admin" desc="Control panel" />
             </>
           )}
         </nav>
 
         <div className="px-3 py-4" style={{ borderTop: "1px solid var(--line)" }}>
-          <Link href="/profile" className="flex items-center gap-3 px-4 py-3 rounded hover:bg-surface-alt group transition-all mb-1">
+          <a href="/profile"
+            className="flex items-center gap-3 px-4 py-3 rounded hover:bg-surface-alt group transition-all mb-1"
+            style={{ textDecoration: "none" }}>
             <div className="relative flex-shrink-0">
-              <div className="w-9 h-9 rounded flex items-center justify-center text-sm font-bold"
-                style={{ background: "#171a20", color: "#fff" }}>
+              <div className="w-9 h-9 rounded flex items-center justify-center text-sm font-bold font-display"
+                style={{ background: "#1e1a2e", color: "#fff" }}>
                 {session.user?.name?.[0]?.toUpperCase() ?? "U"}
               </div>
-              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style={{ background: "#3457d5", border: "2px solid var(--surface)" }} />
+              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+                style={{ background: "#6c55e0", border: "2px solid var(--bg)" }} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium truncate transition-colors group-hover:text-text" style={{ color: "#171a20" }}>{session.user?.name ?? "User"}</p>
-              <p className="text-[10px] truncate" style={{ color: "#5c5e62" }}>{session.user?.email?.split("@")[0]}</p>
+              <p className="text-xs font-bold truncate font-display" style={{ color: "#1e1a2e" }}>
+                {session.user?.name ?? "User"}
+              </p>
+              <p className="text-[10px] truncate" style={{ color: "#9b9aa3" }}>
+                {session.user?.email?.split("@")[0]}
+              </p>
             </div>
-            <span style={{ color: "#5c5e62" }}>→</span>
-          </Link>
+            <span style={{ color: "#9b9aa3" }}>→</span>
+          </a>
           <SignOutButton />
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden glass-strong" style={{ borderTop: "1px solid var(--line)" }}>
-        {[...NAV.slice(0, 4), { href: "/profile", label: "Profile", icon: "◇", desc: "" }].map(item => (
-          <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center justify-center py-3 gap-1" style={{ color: "#5c5e62" }}>
-            <span style={{ fontSize: "18px" }}>{item.icon}</span>
-            <span className="label" style={{ fontSize: "8px" }}>{item.label}</span>
-          </Link>
+      {/* ── Mobile top bar — only on mobile ── */}
+      <header className="flex md:hidden fixed top-0 left-0 right-0 z-40 px-4 py-3 items-center justify-between glass-strong"
+        style={{ borderBottom: "1px solid var(--line)" }}>
+        <Logo size="xs" showTagline={false} />
+        <div className="flex items-center gap-3">
+          <a href="/profile" className="w-8 h-8 rounded flex items-center justify-center text-xs font-bold font-display"
+            style={{ background: "#1e1a2e", color: "#fff" }}>
+            {session.user?.name?.[0]?.toUpperCase() ?? "U"}
+          </a>
+        </div>
+      </header>
+
+      {/* ── Mobile bottom nav ── */}
+      <nav className="flex md:hidden fixed bottom-0 left-0 right-0 z-40"
+        style={{
+          background: "rgba(255,255,255,.96)",
+          borderTop: "1px solid var(--line)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}>
+        {[...NAV.slice(0, 4), { href: "/profile", icon: "◇", label: "Profile", desc: "" }].map(item => (
+          <MobileNavItem key={item.href} {...item} />
         ))}
       </nav>
 
-      <main className="flex-1 md:ml-64 min-h-screen pb-24 md:pb-0">
+      {/* ── Main content ── */}
+      <main className="flex-1 min-h-screen"
+        style={{
+          marginLeft: 0,
+          paddingTop: "56px",   /* mobile top bar height */
+          paddingBottom: "72px", /* mobile bottom nav height */
+        }}>
+        {/* Override padding on desktop */}
+        <style>{`
+          @media (min-width: 768px) {
+            main { margin-left: 256px !important; padding-top: 0 !important; padding-bottom: 0 !important; }
+          }
+        `}</style>
         <div className="page-enter">{children}</div>
       </main>
     </div>
