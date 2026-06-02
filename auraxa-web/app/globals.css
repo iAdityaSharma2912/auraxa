@@ -1,0 +1,297 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ════════════════════════════════════════════════════════
+   AURAXA — TESLA THEME
+   White · Minimal · Engineering · Premium
+   ════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Fonts ── */
+  --font-display: 'Montserrat', sans-serif;
+  --font-body:    'Inter', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  /* ── Colors (Tesla) ── */
+  --bg:          #ffffff;
+  --bg-2:        #f4f4f4;
+  --surface:     #fafafa;
+  --surface-alt: #efefef;
+  --text:        #171a20;
+  --muted:       #5c5e62;
+  --line:        rgba(0,0,0,.10);
+  --primary:     #171a20;
+  --secondary:   #3457d5;
+  --accent:      #cc0000;
+
+  /* Tints */
+  --primary-soft:   rgba(23,26,32,.06);
+  --secondary-soft: rgba(52,87,213,.10);
+  --accent-soft:    rgba(204,0,0,.08);
+
+  /* ── Radius (Tesla = tight) ── */
+  --radius:    5px;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.04), 0 1px 3px rgba(0,0,0,.06);
+  --shadow:    0 2px 8px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.06);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+::selection { background: var(--secondary-soft); color: var(--text); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-2); }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 10px; border: 2px solid var(--bg-2); }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.25); }
+
+*:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ════════════════════════════════════════════════════════
+   TYPOGRAPHY
+   ════════════════════════════════════════════════════════ */
+
+.font-display { font-family: var(--font-display); }
+.font-body    { font-family: var(--font-body); }
+.font-mono    { font-family: var(--font-mono); }
+
+h1, h2, h3, h4, h5 { font-family: var(--font-display); color: var(--text); }
+
+.text-display-xl { font-size: clamp(2.8rem, 7vw, 5.5rem); line-height: 1.04; letter-spacing: -0.03em; font-weight: 700; }
+.text-display-lg { font-size: clamp(2rem, 5vw, 3.8rem);   line-height: 1.08; letter-spacing: -0.025em; font-weight: 700; }
+.text-display-md { font-size: clamp(1.5rem, 3vw, 2.4rem); line-height: 1.15; letter-spacing: -0.02em; font-weight: 600; }
+
+/* Tesla uses uppercase tracked labels */
+.label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ════════════════════════════════════════════════════════
+   SURFACES & CARDS
+   ════════════════════════════════════════════════════════ */
+
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(0,0,0,.16);
+}
+
+/* Glass — light, frosted */
+.glass {
+  background: rgba(255,255,255,0.72);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+.glass-strong {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: var(--shadow);
+}
+
+/* Legacy aliases so existing class names keep working */
+.glass-md, .glass-aurora, .glass-gold { 
+  background: rgba(255,255,255,0.72);
+  border: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+}
+
+/* ════════════════════════════════════════════════════════
+   BUTTONS (Tesla style — solid, confident, tight radius)
+   ════════════════════════════════════════════════════════ */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 600; font-size: 13px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 13px 28px; border-radius: var(--radius);
+  cursor: pointer; border: 1px solid transparent;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-primary, .btn-magnetic.btn-primary {
+  background: var(--primary); color: #fff;
+}
+.btn-primary:hover { background: #000; transform: translateY(-1px); box-shadow: var(--shadow); }
+
+.btn-secondary, .btn-magnetic.btn-secondary {
+  background: rgba(255,255,255,.6); color: var(--text); border: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+}
+.btn-secondary:hover { background: var(--surface-alt); border-color: rgba(0,0,0,.2); }
+
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { filter: brightness(1.05); transform: translateY(-1px); }
+
+.btn-blue { background: var(--secondary); color: #fff; }
+.btn-blue:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* Magnetic base alias */
+.btn-magnetic {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 600; font-size: 13px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 13px 28px; border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-gold { background: var(--secondary); color: #fff; padding: 13px 28px; border-radius: var(--radius); font-family: var(--font-display); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.btn-gold:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* ════════════════════════════════════════════════════════
+   INPUTS
+   ════════════════════════════════════════════════════════ */
+
+.input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 16px; font-size: 14px;
+  color: var(--text); font-family: var(--font-body);
+  transition: all 0.2s ease;
+}
+.input::placeholder { color: var(--muted); opacity: 0.7; }
+.input:focus {
+  outline: none; border-color: var(--secondary);
+  box-shadow: 0 0 0 3px var(--secondary-soft);
+}
+
+/* ════════════════════════════════════════════════════════
+   TEXT HELPERS
+   ════════════════════════════════════════════════════════ */
+
+.text-primary   { color: var(--primary); }
+.text-secondary { color: var(--secondary); }
+.text-accent    { color: var(--accent); }
+.text-muted     { color: var(--muted); }
+
+.gradient-aurora, .gradient-cosmic, .gradient-primary {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.gradient-gold, .gradient-warm {
+  background: linear-gradient(135deg, var(--secondary), var(--accent));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+
+/* ════════════════════════════════════════════════════════
+   BACKGROUND — SOFT MESH (light, subtle)
+   ════════════════════════════════════════════════════════ */
+
+.mesh-bg, .cosmic-bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+}
+.mesh-blob, .nebula-orb {
+  position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.4;
+  will-change: transform;
+}
+.mesh-blob-1, .nebula-1 {
+  width: 45vw; height: 45vw; max-width: 520px; max-height: 520px;
+  background: rgba(52,87,213,.10);
+  top: -10%; left: -5%;
+  animation: meshFloat1 30s ease-in-out infinite;
+}
+.mesh-blob-2, .nebula-2 {
+  width: 40vw; height: 40vw; max-width: 480px; max-height: 480px;
+  background: rgba(204,0,0,.05);
+  bottom: -10%; right: -5%;
+  animation: meshFloat2 36s ease-in-out infinite;
+}
+.mesh-blob-3, .nebula-3 {
+  width: 38vw; height: 38vw; max-width: 440px; max-height: 440px;
+  background: rgba(23,26,32,.04);
+  top: 40%; left: 50%;
+  animation: meshFloat3 42s ease-in-out infinite;
+}
+.nebula-4 { display: none; }
+.star-grid, .scan-line { display: none; }
+
+@keyframes meshFloat1 {
+  0%, 100% { transform: translate(0,0) scale(1); }
+  33% { transform: translate(8%,-6%) scale(1.1); }
+  66% { transform: translate(-5%,8%) scale(0.95); }
+}
+@keyframes meshFloat2 {
+  0%, 100% { transform: translate(0,0) scale(1); }
+  33% { transform: translate(-8%,5%) scale(1.08); }
+  66% { transform: translate(6%,-7%) scale(0.96); }
+}
+@keyframes meshFloat3 {
+  0%, 100% { transform: translate(-50%,0) scale(1); }
+  50% { transform: translate(-45%,-8%) scale(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh-blob, .nebula-orb { animation: none; }
+}
+
+/* ════════════════════════════════════════════════════════
+   ANIMATIONS
+   ════════════════════════════════════════════════════════ */
+
+.page-enter { animation: pageReveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes pageReveal { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+.fade-up { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+
+.card-hover { transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+
+.shimmer {
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-alt) 50%, var(--surface) 75%);
+  background-size: 200% 100%; animation: shimmer 1.8s infinite;
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+@keyframes scroll-indicator { 0%,100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 0.9; transform: translateY(8px); } }
+.animate-scroll { animation: scroll-indicator 2s ease-in-out infinite; }
+.animate-float { animation: meshFloat3 8s ease-in-out infinite; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}

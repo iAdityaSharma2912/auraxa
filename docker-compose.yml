@@ -1,0 +1,89 @@
+services:
+  # ─── PostgreSQL ───────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: auraxa_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: auraxa
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # ─── Redis ────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: auraxa_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  # ─── FastAPI Backend ──────────────────────────────────
+  api:
+    build:
+      context: ./auraxa-api
+      dockerfile: Dockerfile
+    container_name: auraxa_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./auraxa-api/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/auraxa
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - /tmp/auraxa_uploads:/tmp/auraxa_uploads
+
+  # ─── Celery Worker ────────────────────────────────────
+  worker:
+    build:
+      context: ./auraxa-api
+      dockerfile: Dockerfile
+    container_name: auraxa_worker
+    restart: unless-stopped
+    command: celery -A app.tasks.analysis_tasks.celery_app worker --loglevel=info --concurrency=2
+    env_file:
+      - ./auraxa-api/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/auraxa
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - /tmp/auraxa_uploads:/tmp/auraxa_uploads
+
+  # ─── Next.js Frontend ─────────────────────────────────
+  web:
+    build:
+      context: ./auraxa-web
+      dockerfile: Dockerfile
+    container_name: auraxa_web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./auraxa-web/.env.local
+    environment:
+      # Used server-side (inside Docker network) to call the API
+      API_INTERNAL_URL: http://api:8000
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
