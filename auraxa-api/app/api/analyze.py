@@ -224,3 +224,48 @@ async def list_analyses(
         .limit(20)
     )
     return list(result.scalars().all())
+
+
+from sqlalchemy import delete as sql_delete
+from app.models.user import EmotionalScore, TimelinePoint, Report
+
+@router.delete("/{analysis_id}")
+async def delete_analysis(
+    analysis_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from sqlalchemy import delete as sql_delete
+
+    result = await db.execute(
+        select(Analysis).where(
+            Analysis.id == analysis_id,
+            Analysis.user_id == current_user.id,
+        )
+    )
+    analysis = result.scalar_one_or_none()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found.")
+
+    # Delete related rows
+    try:
+        from app.models.user import EmotionalScore, TimelinePoint, Report
+        await db.execute(sql_delete(EmotionalScore).where(EmotionalScore.analysis_id == analysis_id))
+        await db.execute(sql_delete(TimelinePoint).where(TimelinePoint.analysis_id == analysis_id))
+        await db.execute(sql_delete(Report).where(Report.analysis_id == analysis_id))
+    except Exception:
+        pass
+
+    await db.delete(analysis)
+    await db.commit()
+
+    # Clear Redis advisor history
+    try:
+        import redis as r
+        from app.core.config import settings
+        rc = r.from_url(settings.REDIS_URL, decode_responses=True)
+        rc.delete(f"auraxa:advisor:{current_user.id}:{analysis_id}")
+    except Exception:
+        pass
+
+    return {"message": "Analysis deleted.", "id": analysis_id}

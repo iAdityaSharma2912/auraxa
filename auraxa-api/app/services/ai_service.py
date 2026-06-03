@@ -160,7 +160,7 @@ async def run_emotional_analysis(conversation_data: dict, intent: str) -> dict:
         {"role": "user",   "content": prompt},
     ]
 
-    content, provider = await ai_router.complete(
+    content, provider, usage = await ai_router.complete(
         messages=messages,
         model_type="analysis",
         temperature=0.25,
@@ -179,7 +179,11 @@ async def run_emotional_analysis(conversation_data: dict, intent: str) -> dict:
                 "b": identified.get("b", "Person B"),
             }
 
-        return result
+        return result, {
+            "prompt_tokens":     usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "total_tokens":      usage.get("total_tokens", 0),
+        }
     except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"JSON parse failed (provider={provider}): {e}\n{content[:300]}")
         raise ValueError(f"AI returned unparseable response via {provider}: {e}")
@@ -224,7 +228,7 @@ async def get_advisor_response(
     messages.extend(conversation_history[-10:])
     messages.append({"role": "user", "content": message})
 
-    content, provider = await ai_router.complete(
+    content, provider, usage = await ai_router.complete(
         messages=messages,
         model_type="advisor",
         temperature=0.7,

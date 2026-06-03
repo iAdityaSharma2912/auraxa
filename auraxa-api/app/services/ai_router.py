@@ -180,6 +180,7 @@ class AIRouter:
 
         latency_ms = (time.time() - start) * 1000
         content = data["choices"][0]["message"]["content"].strip()
+        usage = data.get("usage", {})
 
         # Record success
         h = self._health[provider.name]
@@ -192,7 +193,7 @@ class AIRouter:
             f"[ai_router] ✓ {provider.name}/{model} "
             f"— {round(latency_ms)}ms"
         )
-        return content
+        return content, usage
 
     async def complete(
         self,
@@ -217,10 +218,10 @@ class AIRouter:
 
         for provider in providers:
             try:
-                content = await self._call_provider(
+                content, usage = await self._call_provider(
                     provider, messages, model_type, temperature, max_tokens
                 )
-                return content, provider.name
+                return content, provider.name, usage
 
             except httpx.HTTPStatusError as e:
                 code = e.response.status_code

@@ -1,16 +1,29 @@
 from contextlib import asynccontextmanager
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import logging
-
-from app.api import advisor
 
 from app.core.config import settings
 from app.core.database import create_db_tables
-from app.api import auth, analyze, advisor, reports, users, subscriptions
-from app.api import ws, demo, promo, astrology, palm, admin
-from app.api import daily_insight
+
+from app.api import (
+    auth,
+    analyze,
+    advisor,
+    reports,
+    users,
+    subscriptions,
+    ws,
+    demo,
+    promo,
+    astrology,
+    palm,
+    admin,
+    daily_insight,
+    cards,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -61,10 +74,9 @@ app.include_router(promo.router,         prefix="/api/promo",         tags=["Pro
 app.include_router(astrology.router,     prefix="/api/astrology",     tags=["Astrology"])
 app.include_router(palm.router,          prefix="/api/palm",          tags=["Palm"])
 app.include_router(admin.router,         prefix="/api/admin",         tags=["Admin"])
-app.include_router(demo.router,                                        tags=["Demo"])
-app.include_router(daily_insight.router, prefix="/api", tags=["daily-insight"])
-app.include_router(advisor.router, prefix="/api/advisor", tags=["Advisor"])
-
+app.include_router(cards.router,         prefix="/api/cards",         tags=["Cards"])
+app.include_router(daily_insight.router, prefix="/api",              tags=["Daily Insight"])
+app.include_router(demo.router,                                      tags=["Demo"])
 
 # ─── WebSocket ────────────────────────────────────────────────
 app.include_router(ws.router, tags=["WebSocket"])

@@ -155,7 +155,7 @@ async def send_message(
     messages = [{"role": "system", "content": system_prompt}] + recent
 
     try:
-        reply_text, provider = await ai_router.complete(
+        reply_text, provider, _usage = await ai_router.complete(
             messages=messages,
             model_type="analysis",
             temperature=0.75,

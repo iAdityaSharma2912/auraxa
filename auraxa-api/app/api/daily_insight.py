@@ -54,7 +54,7 @@ def _user_prompt() -> str:
 
 async def _generate_insight() -> dict:
     """Call AI to generate today's insight."""
-    content, provider = await ai_router.complete(
+    content, provider, _usage = await ai_router.complete(
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": _user_prompt()},

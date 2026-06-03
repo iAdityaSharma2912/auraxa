@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Allow: /(marketing)/
+Disallow: /dashboard
+Disallow: /analyze
+Disallow: /results
+Disallow: /reports
+Disallow: /profile
+Disallow: /advisor
+Disallow: /astrology
+Disallow: /upgrade
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://auraxa.app/sitemap.xml

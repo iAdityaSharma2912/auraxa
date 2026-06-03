@@ -4,6 +4,7 @@ Celery Analysis Tasks — Fixed
 - Uses NullPool to prevent asyncio event loop conflicts
 - Handles raw_text_only mode (screenshot OCR fallback)
 - Updates speakers from AI-identified names when in raw text mode
+- Stores real token counts from OpenRouter API response
 """
 
 import asyncio
@@ -77,6 +78,7 @@ async def _run_pipeline(
     from app.models.user import Analysis, AnalysisStatus, EmotionalScore, TimelinePoint, Report
     from app.services.ocr_service import structure_conversation
     from app.services.ai_service import run_emotional_analysis
+    from app.services.ai_router import ai_router
 
     engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
     SessionLocal = async_sessionmaker(
@@ -93,15 +95,14 @@ async def _run_pipeline(
                 return
 
             try:
-                # Stage 1
+                # ── Stage 1: Mark processing ──────────────────────
                 analysis.status = AnalysisStatus.processing
                 await db.commit()
                 logger.info(f"[{analysis_id}] Stage 1: Processing started")
 
-                # Stage 2: OCR / structure
+                # ── Stage 2: OCR / structure ──────────────────────
                 logger.info(f"[{analysis_id}] Stage 2: Structuring from {len(file_paths)} file(s)")
                 conv_data = structure_conversation(file_paths, input_type)
-
                 raw_text_only = conv_data.get("raw_text_only", False)
 
                 if raw_text_only:
@@ -131,28 +132,37 @@ async def _run_pipeline(
                     f"raw_text_only={raw_text_only}"
                 )
 
-                # Stage 3: AI analysis
+                # ── Stage 3: AI analysis ──────────────────────────
                 logger.info(f"[{analysis_id}] Stage 3: Running AI analysis")
-                ai_result = await run_emotional_analysis(conv_data, intent)
+                ai_result, ai_usage = await run_emotional_analysis(conv_data, intent)
 
                 # If AI identified speakers from screenshot, update the record
                 if raw_text_only and conv_data.get("speakers") != {"a": "Person A", "b": "Person B"}:
                     analysis.speakers = conv_data["speakers"]
 
-                logger.info(f"[{analysis_id}] Stage 3 complete: score={ai_result.get('overall_score')}")
+                overall_score       = int(ai_result.get("overall_score", 50))
+                compatibility_score = int(ai_result.get("compatibility_score", 50))
+                toxicity_level      = ai_result.get("toxicity_level", "low")
+                ghosting_risk       = ai_result.get("ghosting_risk", "low")
+                patterns_detected   = ai_result.get("patterns_detected", [])
 
-                # Stage 4: Save scores
+                logger.info(
+                    f"[{analysis_id}] Stage 3 complete: score={overall_score} "
+                    f"| tokens={ai_usage.get('total_tokens', 0)}"
+                )
+
+                # ── Stage 4: Save scores ──────────────────────────
                 score = EmotionalScore(
                     analysis_id=analysis_id,
-                    overall_score=int(ai_result.get("overall_score", 50)),
-                    compatibility_score=int(ai_result.get("compatibility_score", 50)),
+                    overall_score=overall_score,
+                    compatibility_score=compatibility_score,
                     communication_balance=int(ai_result.get("communication_balance", 50)),
                     speaker_a_percentage=conv_data["speaker_a_pct"],
                     speaker_b_percentage=conv_data["speaker_b_pct"],
-                    toxicity_level=ai_result.get("toxicity_level", "low"),
+                    toxicity_level=toxicity_level,
                     attachment_style=ai_result.get("attachment_style", "secure"),
-                    ghosting_risk=ai_result.get("ghosting_risk", "low"),
-                    patterns_detected=ai_result.get("patterns_detected", []),
+                    ghosting_risk=ghosting_risk,
+                    patterns_detected=patterns_detected,
                     ai_narrative=ai_result.get("ai_narrative", ""),
                 )
                 db.add(score)
@@ -169,6 +179,38 @@ async def _run_pipeline(
 
                 db.add(Report(analysis_id=analysis_id, user_id=analysis.user_id))
 
+                # ── Stage 5: Store real token counts ─────────────
+                try:
+                    analysis.tokens_input  = ai_usage.get("prompt_tokens", 0)
+                    analysis.tokens_output = ai_usage.get("completion_tokens", 0)
+                    analysis.tokens_total  = ai_usage.get("total_tokens", 0)
+                    logger.info(
+                        f"[{analysis_id}] Tokens: "
+                        f"in={analysis.tokens_input} "
+                        f"out={analysis.tokens_output} "
+                        f"total={analysis.tokens_total}"
+                    )
+                except Exception:
+                    pass  # Columns may not exist yet — run migrate_tokens.py
+
+                # ── Stage 6: Gen Z verdict ────────────────────────
+                try:
+                    from app.services.genz_service import generate_genz_verdict, score_to_variant
+                    verdict = await generate_genz_verdict(
+                        score=overall_score,
+                        compatibility=compatibility_score,
+                        toxicity=str(toxicity_level.value) if hasattr(toxicity_level, "value") else str(toxicity_level),
+                        ghosting_risk=str(ghosting_risk.value) if hasattr(ghosting_risk, "value") else str(ghosting_risk),
+                        patterns=patterns_detected,
+                        ai_router=ai_router,
+                    )
+                    analysis.genz_verdict = verdict
+                    analysis.card_variant = score_to_variant(overall_score)
+                    logger.info(f"[{analysis_id}] Gen Z verdict: {verdict[:60]}...")
+                except Exception as gz_err:
+                    logger.warning(f"[{analysis_id}] Gen Z verdict failed (non-fatal): {gz_err}")
+
+                # ── Mark complete ─────────────────────────────────
                 analysis.status = AnalysisStatus.completed
                 await db.commit()
                 logger.info(f"[{analysis_id}] ✓ Analysis completed successfully")
