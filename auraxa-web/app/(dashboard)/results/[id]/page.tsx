@@ -443,27 +443,32 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(true);
   const [pollCount, setPollCount] = useState(0);
 
-  const load = useCallback(async () => {
-    try {
-      const sr = await api.get(`/api/analyze/${id}/status`);
-      const status = sr.data?.status;
+const load = useCallback(async () => {
+  try {
+    const sr = await api.get(`/api/analyze/${id}/status`);
+    const status = sr.data?.status;
 
-      if (status === "completed") {
-        const r = await api.get(`/api/analyze/${id}/results`);
-        setResult({ ...r.data, status: "completed" });
-      } else if (status === "failed") {
-        setResult({ id, status: "failed" } as any);
-      } else {
-        setResult((prev) => prev ? { ...prev, status } : { id, status } as any);
-        setPollCount((c) => c + 1);
-        setTimeout(load, 3000);
-      }
-    } catch {
-      if (pollCount < 30) setTimeout(load, 4000);
-    } finally {
-      setLoading(false);
+    if (status === "completed") {
+      const r = await api.get(`/api/analyze/${id}/results`);
+      setResult({ ...r.data, status: "completed" });
+    } else if (status === "failed") {
+      setResult({ id, status: "failed" } as any);
+    } else {
+      setResult((prev) => prev ? { ...prev, status } : { id, status } as any);
+      setPollCount((c) => c + 1);
+      setTimeout(load, 3000);
     }
-  }, [id, pollCount]);
+  } catch (e: any) {
+    // 404 = analysis deleted or never existed — stop polling immediately
+    if (e?.response?.status === 404) {
+      setResult({ id, status: "failed" } as any);
+    } else if (pollCount < 30) {
+      setTimeout(load, 4000);
+    }
+  } finally {
+    setLoading(false);
+  }
+}, [id, pollCount]);
 
   useEffect(() => { load(); }, []);
 
