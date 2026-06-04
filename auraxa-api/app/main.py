@@ -23,7 +23,9 @@ from app.api import (
     admin,
     daily_insight,
     cards,
+    subscription,
 )
+from app.api import subscriptions
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

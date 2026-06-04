@@ -66,6 +66,7 @@ services:
       - redis
     volumes:
       - /tmp/auraxa_uploads:/tmp/auraxa_uploads
+      - paddleocr_models:/root/.paddleocr
 
   # ─── Next.js Frontend ─────────────────────────────────
   web:
@@ -87,3 +88,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  paddleocr_models:

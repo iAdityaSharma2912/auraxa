@@ -1,166 +1,204 @@
 """
-Astrology Service — Phase 4
-----------------------------
-Uses ai_router for automatic provider failover.
+Astrology Service — Comprehensive Report Generation
+----------------------------------------------------
+Generates detailed birth charts, compatibility readings,
+and cosmic relationship insights via AI.
 """
-
 import json
 import logging
-from datetime import date
 from app.services.ai_router import ai_router
 
 logger = logging.getLogger(__name__)
 
-SIGNS = [
-    ("Capricorn",   (1,  1),  (1,  19)),
-    ("Aquarius",    (1,  20), (2,  18)),
-    ("Pisces",      (2,  19), (3,  20)),
-    ("Aries",       (3,  21), (4,  19)),
-    ("Taurus",      (4,  20), (5,  20)),
-    ("Gemini",      (5,  21), (6,  20)),
-    ("Cancer",      (6,  21), (7,  22)),
-    ("Leo",         (7,  23), (8,  22)),
-    ("Virgo",       (8,  23), (9,  22)),
-    ("Libra",       (9,  23), (10, 22)),
-    ("Scorpio",     (10, 23), (11, 21)),
-    ("Sagittarius", (11, 22), (12, 21)),
-    ("Capricorn",   (12, 22), (12, 31)),
-]
 
-SIGN_ELEMENTS = {
-    "Aries": "Fire",    "Leo": "Fire",    "Sagittarius": "Fire",
-    "Taurus": "Earth",  "Virgo": "Earth", "Capricorn": "Earth",
-    "Gemini": "Air",    "Libra": "Air",   "Aquarius": "Air",
-    "Cancer": "Water",  "Scorpio": "Water","Pisces": "Water",
-}
-
-SIGN_MODALITIES = {
-    "Aries": "Cardinal", "Cancer": "Cardinal", "Libra": "Cardinal",   "Capricorn": "Cardinal",
-    "Taurus": "Fixed",   "Leo": "Fixed",       "Scorpio": "Fixed",    "Aquarius": "Fixed",
-    "Gemini": "Mutable", "Virgo": "Mutable",   "Sagittarius": "Mutable", "Pisces": "Mutable",
-}
-
-
-def get_sun_sign(dob: str) -> str:
-    try:
-        d = date.fromisoformat(dob)
-        m, day = d.month, d.day
-        for sign, (sm, sd), (em, ed) in SIGNS:
-            if (m == sm and day >= sd) or (m == em and day <= ed):
-                return sign
-    except Exception:
-        pass
-    return "Unknown"
-
-
-CHART_SYSTEM = """You are Auraxa's astrology AI. Return ONLY a valid JSON object for a birth chart analysis.
-
-{
-  "sun_sign": "...",
-  "element": "...",
-  "modality": "...",
-  "personality_summary": "3-4 sentences",
-  "emotional_style": "2-3 sentences",
-  "communication_style": "2-3 sentences",
-  "relationship_patterns": "2-3 sentences",
-  "strengths": ["3-4 relationship strengths"],
-  "challenges": ["3-4 shadow traits or challenges"],
-  "compatibility_notes": "2-3 sentences on compatible signs",
-  "guidance": "1-2 sentences of actionable relationship guidance"
-}"""
-
-COMPAT_SYSTEM = """You are Auraxa's astrology AI. Return ONLY a valid JSON object for compatibility analysis.
-
-{
-  "person_a_sign": "...",
-  "person_b_sign": "...",
-  "compatibility_score": <integer 0-100>,
-  "overall_dynamic": "3-4 sentences",
-  "strengths": ["3-4 compatibility strengths"],
-  "challenges": ["3-4 compatibility challenges"],
-  "communication_compatibility": "2-3 sentences",
-  "emotional_compatibility": "2-3 sentences",
-  "guidance": "2-3 sentences of actionable guidance"
-}"""
-
-
-def _parse_json(content: str) -> dict:
-    content = content.strip()
-    if "```" in content:
-        for part in content.split("```"):
+def _extract_json(text: str) -> str:
+    text = text.strip()
+    if "```" in text:
+        for part in text.split("```"):
             part = part.strip().lstrip("json").strip()
             if part.startswith("{"):
-                content = part
+                text = part
                 break
-    start = content.find("{")
-    end = content.rfind("}") + 1
+    start = text.find("{")
+    end   = text.rfind("}") + 1
     if start != -1 and end > start:
-        content = content[start:end]
-    return json.loads(content)
+        return text[start:end]
+    raise ValueError("No JSON found in response")
+
+
+BIRTH_CHART_PROMPT = """You are Auraxa's master astrologer. Generate a deeply detailed, accurate birth chart reading.
+
+Return ONLY a valid JSON object:
+{
+  "sun_sign": "<zodiac sign>",
+  "symbol": "<zodiac symbol emoji>",
+  "element": "<Fire|Water|Earth|Air>",
+  "modality": "<Cardinal|Fixed|Mutable>",
+  "ruling_planet": "<planet name>",
+  "ruling_planet_symbol": "<planet symbol emoji>",
+  "tagline": "<one powerful sentence that captures this sign's essence>",
+
+  "personality": {
+    "overview": "<3-4 sentences deep personality overview, specific and insightful>",
+    "core_traits": ["<6-8 specific personality traits>"],
+    "strengths": ["<5 genuine strengths with brief explanations>"],
+    "challenges": ["<4 real challenges/shadow traits with brief explanations>"],
+    "shadow_side": "<2 sentences on their unconscious patterns and shadow>",
+    "hidden_depth": "<2 sentences on what most people don't see about this sign>"
+  },
+
+  "love_and_relationships": {
+    "overview": "<3 sentences on how they love and what they need>",
+    "love_language": "<their primary love language and why>",
+    "ideal_partner": "<what they truly need in a partner>",
+    "dealbreakers": ["<3 dealbreakers for this sign>"],
+    "best_matches": ["<3 most compatible signs with brief reason>"],
+    "challenging_matches": ["<2 challenging signs with brief reason>"],
+    "attachment_tendency": "<their natural attachment style and pattern>",
+    "red_flags_they_show": "<what toxic patterns they may display>",
+    "what_they_need_to_hear": "<one truth this sign needs to accept about love>"
+  },
+
+  "career_and_purpose": {
+    "overview": "<2-3 sentences on their professional nature>",
+    "ideal_careers": ["<5-6 specific career paths>"],
+    "work_style": "<how they work best>",
+    "leadership_style": "<their natural leadership approach>",
+    "financial_tendency": "<their relationship with money>",
+    "life_purpose": "<their deeper soul purpose in 2 sentences>"
+  },
+
+  "spiritual_and_cosmic": {
+    "element_deep_dive": "<2 sentences on what their element means for them specifically>",
+    "modality_meaning": "<1 sentence on what cardinal/fixed/mutable means for them>",
+    "north_node_theme": "<the evolutionary lesson for this sign>",
+    "karmic_pattern": "<the karmic pattern this sign is here to transcend>",
+    "manifestation_style": "<how this sign manifests best>",
+    "power_days": "<which days/phases of the moon are most powerful>",
+    "crystals": ["<3 crystals for this sign>"],
+    "mantra": "<a powerful mantra for this sign>"
+  },
+
+  "current_forecast": {
+    "year_2026": "<2-3 sentences on what 2026 holds for this sign>",
+    "key_themes": ["<3 major themes for this year>"],
+    "watch_out_for": "<1 warning for this year>",
+    "opportunity": "<the biggest opportunity this year>"
+  },
+
+  "famous_examples": ["<3 famous people with this sun sign>"]
+}"""
+
+
+COMPATIBILITY_PROMPT = """You are Auraxa's relationship astrologer. Generate a comprehensive compatibility reading.
+
+Return ONLY a valid JSON object:
+{
+  "compatibility_score": <integer 0-100>,
+  "compatibility_label": "<Cosmic Soulmates|Deep Connection|Strong Potential|Magnetic Tension|Growth Challenge|Complex Dynamic>",
+  "tagline": "<one punchy sentence about this pairing>",
+
+  "overview": "<3-4 sentences on the overall dynamic between these signs>",
+
+  "synastry": {
+    "emotional_compatibility": { "score": <0-100>, "description": "<2 sentences>" },
+    "intellectual_compatibility": { "score": <0-100>, "description": "<2 sentences>" },
+    "physical_compatibility": { "score": <0-100>, "description": "<2 sentences>" },
+    "communication_style": { "score": <0-100>, "description": "<2 sentences>" },
+    "long_term_potential": { "score": <0-100>, "description": "<2 sentences>" }
+  },
+
+  "strengths": ["<4 genuine strengths of this pairing>"],
+  "challenges": ["<3 honest challenges this pair will face>"],
+
+  "dynamic": {
+    "who_leads": "<who naturally takes the lead and why>",
+    "who_nurtures": "<who provides emotional support>",
+    "tension_point": "<the main source of conflict>",
+    "growth_opportunity": "<what they teach each other>"
+  },
+
+  "love_advice": {
+    "for_person_a": "<specific advice for the first sign>",
+    "for_person_b": "<specific advice for the second sign>",
+    "together": "<what they both need to do to thrive>"
+  },
+
+  "famous_couples": ["<2-3 famous couples with this sign combination>"],
+  "verdict": "<one honest Gen Z-coded verdict about this pairing>"
+}"""
 
 
 async def analyze_birth_chart(
     dob: str,
-    name: str = "Person",
-    birth_time: str | None = None,
-    birthplace: str | None = None,
+    name: str = "You",
+    birth_time: str = None,
+    birthplace: str = None,
 ) -> dict:
-    sun_sign = get_sun_sign(dob)
-    element  = SIGN_ELEMENTS.get(sun_sign, "Unknown")
-    modality = SIGN_MODALITIES.get(sun_sign, "Unknown")
+    """Generate comprehensive birth chart reading."""
+    time_info  = f"Birth time: {birth_time}" if birth_time else "Birth time: unknown"
+    place_info = f"Birthplace: {birthplace}" if birthplace else "Birthplace: unknown"
 
-    prompt = f"""Analyse {name}'s astrological profile:
-Sun Sign: {sun_sign} ({element} {modality})
-DOB: {dob}{f" | Time: {birth_time}" if birth_time else ""}{f" | Place: {birthplace}" if birthplace else ""}
+    prompt = f"""Generate a comprehensive birth chart reading for:
+Name: {name}
+Date of Birth: {dob}
+{time_info}
+{place_info}
 
-Focus on emotional intelligence, communication style, and relationship patterns.
-Return the birth chart JSON."""
+Be deeply specific, insightful, and accurate to this sign's actual astrological meaning.
+Return ONLY the JSON."""
 
-    content, provider = await ai_router.complete(
-        messages=[
-            {"role": "system", "content": CHART_SYSTEM},
-            {"role": "user",   "content": prompt},
-        ],
-        model_type="analysis",
-        temperature=0.6,
-        max_tokens=1200,
-    )
-    logger.info(f"Astrology chart via {provider}")
-
-    result = _parse_json(content)
-    result.setdefault("sun_sign", sun_sign)
-    result.setdefault("element", element)
-    result.setdefault("modality", modality)
-    return result
+    try:
+        content, provider, _usage = await ai_router.complete(
+            messages=[
+                {"role": "system", "content": BIRTH_CHART_PROMPT},
+                {"role": "user",   "content": prompt},
+            ],
+            model_type="analysis",
+            temperature=0.6,
+            max_tokens=3000,
+        )
+        logger.info(f"Birth chart via {provider}")
+        result = json.loads(_extract_json(content))
+        result["name"] = name
+        result["dob"]  = dob
+        return result
+    except Exception as e:
+        logger.error(f"Birth chart failed: {e}")
+        raise ValueError(f"Chart generation failed: {e}")
 
 
 async def analyze_compatibility(
     person_a_dob: str,
-    person_a_name: str,
-    person_b_dob: str,
-    person_b_name: str,
+    person_a_name: str = "You",
+    person_b_dob: str  = "",
+    person_b_name: str = "Them",
 ) -> dict:
-    sign_a = get_sun_sign(person_a_dob)
-    sign_b = get_sun_sign(person_b_dob)
+    """Generate comprehensive compatibility reading."""
+    prompt = f"""Generate a comprehensive astrological compatibility reading for:
 
-    prompt = f"""Analyse compatibility:
-{person_a_name}: {sign_a} (born {person_a_dob})
-{person_b_name}: {sign_b} (born {person_b_dob})
+Person A: {person_a_name} (DOB: {person_a_dob})
+Person B: {person_b_name} (DOB: {person_b_dob})
 
-Return the compatibility JSON."""
+Be honest about both the strengths and genuine challenges.
+If this is a difficult pairing, say so clearly but constructively.
+Return ONLY the JSON."""
 
-    content, provider = await ai_router.complete(
-        messages=[
-            {"role": "system", "content": COMPAT_SYSTEM},
-            {"role": "user",   "content": prompt},
-        ],
-        model_type="analysis",
-        temperature=0.6,
-        max_tokens=1200,
-    )
-    logger.info(f"Astrology compatibility via {provider}")
-
-    result = _parse_json(content)
-    result.setdefault("person_a_sign", sign_a)
-    result.setdefault("person_b_sign", sign_b)
-    return result
+    try:
+        content, provider, _usage = await ai_router.complete(
+            messages=[
+                {"role": "system", "content": COMPATIBILITY_PROMPT},
+                {"role": "user",   "content": prompt},
+            ],
+            model_type="analysis",
+            temperature=0.65,
+            max_tokens=2500,
+        )
+        logger.info(f"Compatibility via {provider}")
+        result = json.loads(_extract_json(content))
+        result["person_a"] = {"name": person_a_name, "dob": person_a_dob}
+        result["person_b"] = {"name": person_b_name, "dob": person_b_dob}
+        return result
+    except Exception as e:
+        logger.error(f"Compatibility failed: {e}")
+        raise ValueError(f"Compatibility reading failed: {e}")

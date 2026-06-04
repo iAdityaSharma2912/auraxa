@@ -1,17 +1,17 @@
 """
-Celery Analysis Tasks — Fixed
-------------------------------
-- Uses NullPool to prevent asyncio event loop conflicts
-- Handles raw_text_only mode (screenshot OCR fallback)
-- Updates speakers from AI-identified names when in raw text mode
-- Stores real token counts from OpenRouter API response
+Celery Analysis Tasks — saves complete AI result to full_report column
+so the frontend gets every section: scoring_breakdown, sub_metrics,
+conversation_phases, peak_moments, roast, astrology, red_flags, etc.
 """
 
 import asyncio
+import json
 import logging
 import os
+
 from celery import Celery
 from sqlalchemy.pool import NullPool
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,98 @@ celery_app.conf.update(
 )
 
 
+# ─── Sanitizers ───────────────────────────────────────────
+
+def _safe_int(value, default: int = 50) -> int:
+    if isinstance(value, int):
+        return max(0, min(100, value))
+    if isinstance(value, float):
+        return max(0, min(100, int(value)))
+    if isinstance(value, str):
+        try:
+            return max(0, min(100, int(float(value))))
+        except (ValueError, TypeError):
+            pass
+        mapping = {
+            "balanced": 50, "equal": 50, "even": 50,
+            "unbalanced": 30, "imbalanced": 30,
+            "very unbalanced": 15, "heavily unbalanced": 10,
+            "slightly unbalanced": 40, "mostly equal": 50,
+        }
+        return mapping.get(value.lower().strip(), default)
+    return default
+
+
+def _safe_toxicity(value) -> str:
+    if isinstance(value, (int, float)):
+        n = int(value)
+        if n <= 20:  return "low"
+        if n <= 45:  return "medium"
+        if n <= 75:  return "high"
+        return "critical"
+    if isinstance(value, str):
+        v = value.lower().strip()
+        if v in ("low", "medium", "high", "critical"):
+            return v
+        if v in ("none", "minimal", "healthy", "clean", "very low", "0"):
+            return "low"
+        if v in ("moderate", "some", "mild", "slight"):
+            return "medium"
+        if v in ("severe", "very high", "extreme", "toxic"):
+            return "critical"
+        try:
+            n = int(float(v))
+            if n <= 20:  return "low"
+            if n <= 45:  return "medium"
+            if n <= 75:  return "high"
+            return "critical"
+        except (ValueError, TypeError):
+            pass
+    return "low"
+
+
+def _safe_ghosting(value) -> str:
+    if isinstance(value, (int, float)):
+        n = int(value)
+        if n <= 30:  return "low"
+        if n <= 65:  return "medium"
+        return "high"
+    if isinstance(value, str):
+        v = value.lower().strip()
+        if v in ("low", "medium", "high"):
+            return v
+        if v in ("none", "minimal", "unlikely", "stable", "very low"):
+            return "low"
+        if v in ("moderate", "possible", "some"):
+            return "medium"
+        if v in ("likely", "probable", "very high", "imminent"):
+            return "high"
+        try:
+            n = int(float(v))
+            if n <= 30:  return "low"
+            if n <= 65:  return "medium"
+            return "high"
+        except (ValueError, TypeError):
+            pass
+    return "low"
+
+
+def _safe_attachment(value) -> str:
+    if isinstance(value, str):
+        v = value.lower().strip()
+        if v in ("secure", "anxious", "avoidant", "disorganized"):
+            return v
+        if any(x in v for x in ("anxious", "preoccupied", "clingy")):
+            return "anxious"
+        if any(x in v for x in ("avoidant", "dismissive", "distant")):
+            return "avoidant"
+        if any(x in v for x in ("disorganized", "fearful", "chaotic")):
+            return "disorganized"
+    return "secure"
+
+
+# ─── Async runner ─────────────────────────────────────────
+
 def run_async(coro):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -42,17 +134,14 @@ def run_async(coro):
     finally:
         try:
             pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
             if pending:
-                for task in pending:
-                    task.cancel()
-                loop.run_until_complete(
-                    asyncio.gather(*pending, return_exceptions=True)
-                )
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
         except Exception:
             pass
-        finally:
-            loop.close()
-            asyncio.set_event_loop(None)
+        loop.close()
+        asyncio.set_event_loop(None)
 
 
 @celery_app.task(
@@ -63,18 +152,14 @@ def run_async(coro):
     soft_time_limit=300,
     time_limit=360,
 )
-def run_analysis_task(
-    self, analysis_id: str, file_paths: list, input_type: str, intent: str
-):
+def run_analysis_task(self, analysis_id: str, file_paths: list, input_type: str, intent: str):
     logger.info(f"[{analysis_id}] Task started — input_type={input_type} intent={intent}")
     return run_async(_run_pipeline(analysis_id, file_paths, input_type, intent))
 
 
-async def _run_pipeline(
-    analysis_id: str, file_paths: list, input_type: str, intent: str
-):
+async def _run_pipeline(analysis_id: str, file_paths: list, input_type: str, intent: str):
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-    from sqlalchemy import select
+    from sqlalchemy import select, text
     from app.models.user import Analysis, AnalysisStatus, EmotionalScore, TimelinePoint, Report
     from app.services.ocr_service import structure_conversation
     from app.services.ai_service import run_emotional_analysis
@@ -95,21 +180,18 @@ async def _run_pipeline(
                 return
 
             try:
-                # ── Stage 1: Mark processing ──────────────────────
+                # ── Stage 1: Mark processing ──────────────
                 analysis.status = AnalysisStatus.processing
                 await db.commit()
                 logger.info(f"[{analysis_id}] Stage 1: Processing started")
 
-                # ── Stage 2: OCR / structure ──────────────────────
+                # ── Stage 2: OCR / structure ──────────────
                 logger.info(f"[{analysis_id}] Stage 2: Structuring from {len(file_paths)} file(s)")
                 conv_data = structure_conversation(file_paths, input_type)
                 raw_text_only = conv_data.get("raw_text_only", False)
 
                 if raw_text_only:
-                    logger.info(
-                        f"[{analysis_id}] Raw text mode active "
-                        f"({len(conv_data.get('raw_text', ''))} chars) — AI will extract structure"
-                    )
+                    logger.info(f"[{analysis_id}] Raw text mode — AI extracts structure")
                     analysis.speakers      = conv_data["speakers"]
                     analysis.raw_messages  = []
                     analysis.message_count = conv_data["message_count"]
@@ -117,7 +199,7 @@ async def _run_pipeline(
                 else:
                     if conv_data["message_count"] == 0:
                         raise ValueError(
-                            "No text could be extracted from the uploaded file. "
+                            "No text could be extracted from the file. "
                             "Please use the Paste Text option instead."
                         )
                     analysis.speakers      = conv_data["speakers"]
@@ -126,81 +208,127 @@ async def _run_pipeline(
                     analysis.date_range    = conv_data["date_range"]
 
                 await db.commit()
-                logger.info(
-                    f"[{analysis_id}] Stage 2 complete: "
-                    f"{conv_data['message_count']} messages, "
-                    f"raw_text_only={raw_text_only}"
-                )
+                logger.info(f"[{analysis_id}] Stage 2 complete: {conv_data['message_count']} msgs")
 
-                # ── Stage 3: AI analysis ──────────────────────────
+                # ── Stage 3: AI analysis ──────────────────
                 logger.info(f"[{analysis_id}] Stage 3: Running AI analysis")
                 ai_result, ai_usage = await run_emotional_analysis(conv_data, intent)
 
-                # If AI identified speakers from screenshot, update the record
                 if raw_text_only and conv_data.get("speakers") != {"a": "Person A", "b": "Person B"}:
                     analysis.speakers = conv_data["speakers"]
 
-                overall_score       = int(ai_result.get("overall_score", 50))
-                compatibility_score = int(ai_result.get("compatibility_score", 50))
-                toxicity_level      = ai_result.get("toxicity_level", "low")
-                ghosting_risk       = ai_result.get("ghosting_risk", "low")
-                patterns_detected   = ai_result.get("patterns_detected", [])
+                # Sanitize enum fields
+                overall_score         = _safe_int(ai_result.get("overall_score", 50))
+                compatibility_score   = _safe_int(ai_result.get("compatibility_score", 50))
+                communication_balance = _safe_int(ai_result.get("communication_balance", 50))
+                toxicity_level        = _safe_toxicity(ai_result.get("toxicity_level", "low"))
+                ghosting_risk         = _safe_ghosting(ai_result.get("ghosting_risk", "low"))
+                attachment_style      = _safe_attachment(ai_result.get("attachment_style", "secure"))
+                patterns_detected     = ai_result.get("patterns_detected", [])
+                if not isinstance(patterns_detected, list):
+                    patterns_detected = []
 
                 logger.info(
                     f"[{analysis_id}] Stage 3 complete: score={overall_score} "
-                    f"| tokens={ai_usage.get('total_tokens', 0)}"
+                    f"tox={toxicity_level} ghost={ghosting_risk} "
+                    f"tokens={ai_usage.get('total_tokens', 0)}"
                 )
 
-                # ── Stage 4: Save scores ──────────────────────────
+                # ── Stage 4: Save EmotionalScore ──────────
                 score = EmotionalScore(
                     analysis_id=analysis_id,
                     overall_score=overall_score,
                     compatibility_score=compatibility_score,
-                    communication_balance=int(ai_result.get("communication_balance", 50)),
-                    speaker_a_percentage=conv_data["speaker_a_pct"],
-                    speaker_b_percentage=conv_data["speaker_b_pct"],
+                    communication_balance=communication_balance,
+                    speaker_a_percentage=_safe_int(conv_data.get("speaker_a_pct", 50)),
+                    speaker_b_percentage=_safe_int(conv_data.get("speaker_b_pct", 50)),
                     toxicity_level=toxicity_level,
-                    attachment_style=ai_result.get("attachment_style", "secure"),
+                    attachment_style=attachment_style,
                     ghosting_risk=ghosting_risk,
                     patterns_detected=patterns_detected,
-                    ai_narrative=ai_result.get("ai_narrative", ""),
+                    ai_narrative=str(ai_result.get("ai_narrative", ""))[:2000],
                 )
                 db.add(score)
 
+                # ── Stage 5: Timeline points ──────────────
                 for i, point in enumerate(ai_result.get("timeline", [])[:30]):
-                    db.add(TimelinePoint(
-                        analysis_id=analysis_id,
-                        timestamp=str(point.get("timestamp", f"Point {i+1}")),
-                        emotional_intensity=float(point.get("emotional_intensity", 50)),
-                        sentiment=point.get("sentiment", "neutral"),
-                        speaker=point.get("speaker", "a"),
-                        sequence_index=i,
-                    ))
+                    try:
+                        db.add(TimelinePoint(
+                            analysis_id=analysis_id,
+                            timestamp=str(point.get("timestamp", f"Point {i+1}"))[:100],
+                            emotional_intensity=float(point.get("emotional_intensity", 50)),
+                            sentiment=str(point.get("sentiment", "neutral")),
+                            speaker=str(point.get("speaker", "a")),
+                            sequence_index=i,
+                        ))
+                    except Exception:
+                        pass
 
+                # ── Stage 6: Save full_report JSONB ───────
+                #
+                # This is the key step — we store the COMPLETE ai_result
+                # so the frontend gets every section:
+                # scoring_breakdown, sub_metrics, conversation_phases,
+                # peak_moments, key_topics, roast, astrology, red_flags,
+                # green_flags, hard_truths, therapist_note, etc.
+                #
+                full_report_data = {
+                    "scoring_breakdown":             ai_result.get("scoring_breakdown"),
+                    "sub_metrics":                   ai_result.get("sub_metrics"),
+                    "hard_truths":                   ai_result.get("hard_truths", []),
+                    "key_topics":                    ai_result.get("key_topics", []),
+                    "conversation_phases":           ai_result.get("conversation_phases", []),
+                    "conversation_themes":           ai_result.get("conversation_themes"),
+                    "peak_moments":                  ai_result.get("peak_moments"),
+                    "emotional_moments":             ai_result.get("emotional_moments"),
+                    "communication_analysis":        ai_result.get("communication_analysis"),
+                    "red_flags":                     ai_result.get("red_flags", []),
+                    "green_flags":                   ai_result.get("green_flags", []),
+                    "relationship_health_indicators": ai_result.get("relationship_health_indicators"),
+                    "roast":                         ai_result.get("roast"),
+                    "astrology_reading":             ai_result.get("astrology_reading"),
+                    "what_this_reveals":             ai_result.get("what_this_reveals"),
+                    "therapist_note":                ai_result.get("therapist_note"),
+                    "genz_verdict":                  ai_result.get("genz_verdict"),
+                }
+
+                try:
+                    # Use raw SQL to upsert to avoid model column dependency
+                    await db.execute(
+                        text("""
+                            UPDATE analyses
+                            SET full_report = :full_report
+                            WHERE id = :analysis_id
+                        """),
+                        {
+                            "full_report": json.dumps(full_report_data),
+                            "analysis_id": analysis_id,
+                        },
+                    )
+                    logger.info(f"[{analysis_id}] full_report saved ✓")
+                except Exception as fr_err:
+                    # Non-fatal — basic scores still saved
+                    logger.warning(f"[{analysis_id}] full_report save failed (non-fatal): {fr_err}")
+
+                # ── Stage 7: Create Report record ─────────
                 db.add(Report(analysis_id=analysis_id, user_id=analysis.user_id))
 
-                # ── Stage 5: Store real token counts ─────────────
+                # ── Stage 8: Token counts ─────────────────
                 try:
                     analysis.tokens_input  = ai_usage.get("prompt_tokens", 0)
                     analysis.tokens_output = ai_usage.get("completion_tokens", 0)
                     analysis.tokens_total  = ai_usage.get("total_tokens", 0)
-                    logger.info(
-                        f"[{analysis_id}] Tokens: "
-                        f"in={analysis.tokens_input} "
-                        f"out={analysis.tokens_output} "
-                        f"total={analysis.tokens_total}"
-                    )
                 except Exception:
-                    pass  # Columns may not exist yet — run migrate_tokens.py
+                    pass
 
-                # ── Stage 6: Gen Z verdict ────────────────────────
+                # ── Stage 9: Gen Z verdict ────────────────
                 try:
                     from app.services.genz_service import generate_genz_verdict, score_to_variant
                     verdict = await generate_genz_verdict(
                         score=overall_score,
                         compatibility=compatibility_score,
-                        toxicity=str(toxicity_level.value) if hasattr(toxicity_level, "value") else str(toxicity_level),
-                        ghosting_risk=str(ghosting_risk.value) if hasattr(ghosting_risk, "value") else str(ghosting_risk),
+                        toxicity=toxicity_level,
+                        ghosting_risk=ghosting_risk,
                         patterns=patterns_detected,
                         ai_router=ai_router,
                     )
@@ -210,16 +338,23 @@ async def _run_pipeline(
                 except Exception as gz_err:
                     logger.warning(f"[{analysis_id}] Gen Z verdict failed (non-fatal): {gz_err}")
 
-                # ── Mark complete ─────────────────────────────────
+                # ── Stage 10: Mark complete ────────────────
                 analysis.status = AnalysisStatus.completed
                 await db.commit()
                 logger.info(f"[{analysis_id}] ✓ Analysis completed successfully")
 
             except Exception as e:
                 logger.error(f"[{analysis_id}] ✗ Analysis failed: {e}", exc_info=True)
-                analysis.status = AnalysisStatus.failed
-                analysis.error_message = str(e)
-                await db.commit()
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+                try:
+                    analysis.status = AnalysisStatus.failed
+                    analysis.error_message = str(e)[:500]
+                    await db.commit()
+                except Exception:
+                    pass
                 raise
 
     finally:

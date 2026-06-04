@@ -123,7 +123,7 @@ Interpret these emotional patterns through a cosmic and astrological lens.
 Return ONLY the JSON object."""
 
     try:
-        content, provider = await ai_router.complete(
+        content, provider, _usage = await ai_router.complete(
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user",   "content": prompt},

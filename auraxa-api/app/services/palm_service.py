@@ -133,7 +133,7 @@ async def analyze_palm(image_base64: str, media_type: str = "image/jpeg") -> dic
     while attempt < max_attempts:
         attempt += 1
         try:
-            content, used_provider = await ai_router.complete(
+            content, used_provider, _usage = await ai_router.complete(
                 messages=messages,
                 model_type="vision",
                 temperature=0.4,
