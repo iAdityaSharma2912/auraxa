@@ -6,6 +6,7 @@ import Link from "next/link";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import GenZCard, { scoreToVariant, scoreToSlang } from "@/components/cards/GenZCard";
+import { DownloadReportButton } from "@/components/results/DownloadReportButton";
 
 // ─── Types ────────────────────────────────────────────────
 interface Scores {
@@ -530,6 +531,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         <Link href={`/advisor/${id}`} className="btn btn-secondary inline-flex items-center gap-2" style={{ fontSize: "11px", padding: "8px 16px" }}>
           Ask AI Advisor
         </Link>
+        <DownloadReportButton result={result!} />
       </div>
 
       {/* Hero */}
