@@ -1,9 +1,11 @@
 """
-AI Service — Complete with Expanded Scoring Dimensions
--------------------------------------------------------
-Captures: emotional health, compatibility, ghosting risk,
-toxicity, initiation balance, response time trend,
-sentiment arc, affection signals, peak moments, topics.
+AI Service — 2-Call, Anti-Anchoring Scoring
+---------------------------------------------
+Call 1: scores + roast + astrology + health + flags  (always completes)
+Call 2: topics + phases + peaks + themes + reveals   (detail)
+
+Anti-anchoring: forces AI away from lazy 70-80 default.
+Temperature 0.6 for genuine score variance.
 """
 
 import json
@@ -12,12 +14,13 @@ from app.services.ai_router import ai_router
 
 logger = logging.getLogger(__name__)
 
+INSTAGRAM_HANDLE = "@iaddy29"
+
 
 def _extract_json(text: str) -> str:
     text = text.strip()
     if "```" in text:
-        parts = text.split("```")
-        for part in parts:
+        for part in text.split("```"):
             part = part.strip()
             if part.startswith("json"):
                 part = part[4:].strip()
@@ -26,7 +29,7 @@ def _extract_json(text: str) -> str:
                 break
     start = text.find("{")
     if start == -1:
-        raise ValueError("No JSON object found in AI response")
+        raise ValueError("No JSON found")
     depth = 0
     for i, ch in enumerate(text[start:], start):
         if ch == "{":
@@ -38,198 +41,255 @@ def _extract_json(text: str) -> str:
     return text[start:]
 
 
-ANALYSIS_SYSTEM_PROMPT = """You are Auraxa's deep relationship analysis engine. Brutally honest, specific, compassionate — never sugarcoat.
+# ─── CALL 1: Core + Priority sections ─────────────────────
 
-RULES:
-- Be SPECIFIC. Use actual patterns from the conversation.
-- Be HONEST. Name manipulation, withdrawal, avoidance directly.
-- NEVER say "it appears", "it seems", "based on analysis"
-- Gen Z voice only when score supports it.
-- Score 85+: "slay coded, main character energy fr"
-- Score 65-84: "healing arc unlocked, W rizz incoming"
-- Score 45-64: "situationship energy, mid but fixable"
-- Score <45: "run. block. heal. that's the full plan bestie"
+CALL1_PROMPT = """You are Auraxa, a brutally honest relationship analyst. Specific, not generic.
 
-Return ONLY valid JSON — all fields required:
+SCORING RULES — MANDATORY:
+- Use the FULL 0-100 range. Do NOT default to 70-80. That is lazy.
+- 90-100: exceptional, rare genuine connection (almost never)
+- 75-89: good with real issues present
+- 55-74: significant problems, real work needed
+- 35-54: serious red flags, unhealthy patterns
+- 0-34: toxic, harmful, get out now
+- Score MUST reflect THIS specific conversation. Not a generic score.
+- If you give 75, cite 3 specific reasons from the text why it's exactly 75 and not 60 or 85.
+- One-sided effort, avoidance, emotional withdrawal → 50-65
+- Manipulation, consistent toxicity, ghosting patterns → below 50
+- Mutual vulnerability, consistent support, healthy conflict resolution → 80+
 
+Gen Z verdicts: 85+="slay coded fr", 65-84="healing arc unlocked", 45-64="situationship energy mid", <45="run block heal bestie"
+
+Return ONLY compact JSON:
 {
-  "overall_score": <integer 0-100, emotional health of this connection>,
+  "overall_score": <integer 0-100 — based on actual patterns found>,
   "compatibility_score": <integer 0-100>,
   "toxicity_level": <"low"|"medium"|"high"|"critical">,
   "ghosting_risk": <"low"|"medium"|"high">,
   "attachment_style": <"secure"|"anxious"|"avoidant"|"disorganized">,
-  "communication_balance": <integer 0-100, 50=perfectly equal>,
-  "patterns_detected": [<4-6 specific behavioural pattern strings>],
-  "ai_narrative": "<4-5 brutally honest sentences — specific to this conversation>",
-  "genz_verdict": "<one punchy Gen Z verdict>",
-
+  "communication_balance": <integer 0-100, 50=equal>,
+  "patterns_detected": ["<4-6 SPECIFIC behavioural patterns from THIS conversation>"],
+  "ai_narrative": "<4 brutally honest sentences — cite specific examples from the chat>",
+  "genz_verdict": "<one punchy verdict matching the score range>",
   "scoring_breakdown": {
-    "emotional_health": <integer 0-100>,
-    "emotional_health_note": "<one sentence explaining this score>",
-    "compatibility": <integer 0-100>,
-    "compatibility_note": "<one sentence>",
-    "toxicity_score": <integer 0-100, 0=none, 100=critical>,
-    "toxicity_note": "<one sentence>",
-    "ghosting_score": <integer 0-100, 0=none, 100=certain ghost>,
-    "ghosting_note": "<one sentence>"
+    "emotional_health": <0-100>,
+    "emotional_health_note": "<one sentence with specific evidence>",
+    "compatibility": <0-100>,
+    "compatibility_note": "<one sentence with specific evidence>",
+    "toxicity_score": <0-100>,
+    "toxicity_note": "<one sentence with specific evidence>",
+    "ghosting_score": <0-100>,
+    "ghosting_note": "<one sentence with specific evidence>"
   },
-
   "sub_metrics": {
     "initiation_balance": {
-      "person_a_pct": <integer 0-100>,
-      "person_b_pct": <integer 0-100>,
-      "who_initiates_more": "<name of person who initiates more, or 'equal'>",
-      "note": "<one sentence on what this imbalance means>"
+      "person_a_pct": <0-100>,
+      "person_b_pct": <0-100>,
+      "who_initiates_more": "<name or equal>",
+      "note": "<one sentence>"
     },
     "response_time_trend": {
       "trend": <"improving"|"declining"|"stable"|"erratic">,
-      "person_a_trend": "<faster/slower/consistent>",
-      "person_b_trend": "<faster/slower/consistent>",
-      "note": "<one sentence on what this pattern reveals>"
+      "person_a_trend": "<faster|slower|consistent>",
+      "person_b_trend": "<faster|slower|consistent>",
+      "note": "<one sentence>"
     },
     "sentiment_arc": {
       "early_sentiment": <"positive"|"neutral"|"negative">,
       "middle_sentiment": <"positive"|"neutral"|"negative">,
       "recent_sentiment": <"positive"|"neutral"|"negative">,
       "arc_direction": <"improving"|"declining"|"stable"|"volatile">,
-      "note": "<one sentence on how the emotional tone has shifted>"
+      "note": "<one sentence>"
     },
     "affection_signals": {
-      "count": <integer — number of affectionate messages/moments>,
+      "count": <integer>,
       "quality": <"high"|"medium"|"low"|"absent">,
-      "who_shows_more": "<name or 'equal'>",
-      "examples": ["<2-3 specific types of affection shown, e.g. 'compliments', 'checking in', 'pet names'>"],
-      "note": "<one sentence on the affection dynamic>"
+      "who_shows_more": "<name or equal>",
+      "examples": ["<type1>","<type2>"],
+      "note": "<one sentence>"
     }
   },
-
-  "hard_truths": [
-    "<3-5 specific uncomfortable truths about this relationship>"
+  "hard_truths": ["<3-4 SPECIFIC uncomfortable truths — cite actual patterns>"],
+  "roast": {
+    "person_a_roast": "<2-3 sentence specific roast — use their actual behaviour>",
+    "person_b_roast": "<2-3 sentence specific roast — use their actual behaviour>",
+    "relationship_roast": "<2 sentence roast of the dynamic>",
+    "roast_verdict": "<one final savage but loving line>"
+  },
+  "astrology_reading": {
+    "inferred_sign_a": "<zodiac inferred from communication style>",
+    "inferred_sign_b": "<zodiac inferred from communication style>",
+    "cosmic_compatibility": "<one sentence>",
+    "element_dynamic": "<one sentence>",
+    "mercury_reading": "<one sentence>",
+    "venus_reading": "<one sentence>",
+    "saturn_truth": "<one sentence>",
+    "cosmic_verdict": "<one sentence from the cosmos>"
+  },
+  "relationship_health_indicators": {
+    "mutual_respect": <0-100>,
+    "emotional_safety": <0-100>,
+    "authenticity": <0-100>,
+    "reciprocity": <0-100>,
+    "growth_potential": <0-100>
+  },
+  "communication_analysis": {
+    "who_initiates_more": "<name or equal>",
+    "initiation_percentage": "<e.g. 60% A, 40% B>",
+    "response_style_a": "<one honest sentence>",
+    "response_style_b": "<one honest sentence>",
+    "humor_level": "<none|occasional|frequent|constant>",
+    "affection_shown": "<one sentence>",
+    "conflict_style": "<one sentence>",
+    "power_dynamic": "<equal|A dominant|B dominant|shifting>"
+  },
+  "red_flags": [
+    {"flag": "<specific red flag>", "severity": "<minor|moderate|serious>", "evidence": "<specific pattern>"}
   ],
+  "green_flags": [
+    {"flag": "<specific positive>", "evidence": "<specific example>"}
+  ],
+  "emotional_moments": {
+    "most_positive_moment": "<specific moment>",
+    "most_tense_moment": "<specific moment>",
+    "turning_point": "<specific moment>",
+    "unresolved_tension": "<what is unaddressed>"
+  }
+}"""
 
+
+# ─── CALL 2: Detail sections ───────────────────────────────
+
+CALL2_PROMPT = """You are Auraxa. Given this conversation, return ONLY the detail analysis JSON:
+{
   "key_topics": [
-    {
-      "topic": "<topic name, max 3 words>",
-      "frequency": <"high"|"medium"|"low">,
-      "sentiment": <"positive"|"neutral"|"negative"|"mixed">,
-      "description": "<one honest sentence>"
-    }
+    {"topic": "<3 words max>", "frequency": "<high|medium|low>", "sentiment": "<positive|neutral|negative|mixed>", "description": "<one honest sentence>"}
   ],
-
   "conversation_phases": [
     {
-      "phase_number": <1, 2, 3...>,
-      "phase_name": "<evocative name e.g. 'The Honeymoon', 'The Slow Fade'>",
-      "description": "<2-3 sentences on what this phase felt like and what was really happening>",
-      "dominant_emotion": "<primary emotion in this phase>",
+      "phase_number": <1,2,3...>,
+      "phase_name": "<evocative name like 'The Slow Fade' or 'The Honeymoon'>",
+      "description": "<2 sentences on what was really happening>",
+      "dominant_emotion": "<primary emotion>",
       "shift_trigger": "<what caused transition to next phase>",
       "red_or_green": <"red"|"green"|"neutral">
     }
   ],
-
   "peak_moments": {
     "highest_point": {
-      "description": "<specific description of the best moment in this conversation>",
-      "why_it_mattered": "<one sentence on why this moment was significant>"
+      "description": "<specific best moment>",
+      "why_it_mattered": "<one sentence>"
     },
     "lowest_point": {
-      "description": "<specific description of the worst/most tense moment>",
-      "what_it_revealed": "<one sentence on what it exposed>"
+      "description": "<specific worst moment>",
+      "what_it_revealed": "<one sentence>"
     },
-    "turning_point": "<the specific moment everything shifted — if none, say 'No clear turning point detected'>",
-    "most_authentic_moment": "<when both people were most genuinely themselves>"
+    "turning_point": "<specific moment or 'No clear turning point detected'>",
+    "most_authentic_moment": "<when both were most genuinely themselves>"
   },
-
   "conversation_themes": {
-    "primary_theme": "<the dominant theme>",
-    "emotional_undercurrent": "<what runs beneath the surface>",
-    "what_they_avoid": "<specific topic/feeling consistently avoided>",
+    "primary_theme": "<dominant theme>",
+    "emotional_undercurrent": "<what runs beneath>",
+    "what_they_avoid": "<topic/feeling avoided>",
     "what_they_return_to": "<what they keep coming back to>",
-    "overall_tone": "<honest vibe: warm/cold/anxious/playful/tense/performative/guarded>"
+    "overall_tone": "<warm|cold|anxious|playful|tense|performative|guarded>"
   },
-
-  "communication_analysis": {
-    "who_initiates_more": "<person name or 'equal'>",
-    "initiation_percentage": "<e.g. '65% A, 35% B'>",
-    "response_style_a": "<honest assessment>",
-    "response_style_b": "<honest assessment>",
-    "humor_level": "<none|occasional|frequent|constant>",
-    "affection_shown": "<how they show care or the honest truth if they don't>",
-    "conflict_style": "<how they handle tension>",
-    "power_dynamic": "<equal|A dominant|B dominant|shifting>"
-  },
-
-  "red_flags": [
-    {
-      "flag": "<specific red flag>",
-      "severity": <"minor"|"moderate"|"serious">,
-      "evidence": "<specific pattern observed>"
-    }
-  ],
-
-  "green_flags": [
-    {
-      "flag": "<specific positive pattern>",
-      "evidence": "<specific example>"
-    }
-  ],
-
-  "emotional_moments": {
-    "most_positive_moment": "<the genuine high point>",
-    "most_tense_moment": "<the real low>",
-    "turning_point": "<moment everything changed>",
-    "unresolved_tension": "<what's still sitting there unaddressed>"
-  },
-
-  "relationship_health_indicators": {
-    "mutual_respect": <integer 0-100>,
-    "emotional_safety": <integer 0-100>,
-    "authenticity": <integer 0-100>,
-    "reciprocity": <integer 0-100>,
-    "growth_potential": <integer 0-100>
-  },
-
-  "roast": {
-    "person_a_roast": "<specific, honest, 2-3 sentence roast of Person A's patterns>",
-    "person_b_roast": "<same for Person B>",
-    "relationship_roast": "<roast the dynamic as a whole>",
-    "roast_verdict": "<one final savage but loving line>"
-  },
-
-  "astrology_reading": {
-    "inferred_sign_a": "<inferred zodiac from their communication style>",
-    "inferred_sign_b": "<inferred zodiac from their communication style>",
-    "cosmic_compatibility": "<what astrology says about this pairing>",
-    "element_dynamic": "<element combination and what it means>",
-    "mercury_reading": "<communication style through astrology lens>",
-    "venus_reading": "<love style through astrology lens>",
-    "saturn_truth": "<the karmic lesson this connection teaches>",
-    "cosmic_verdict": "<one sentence from the cosmos>"
-  },
-
-  "what_this_reveals": "<3 sentences on what this reveals that they haven't admitted to themselves>",
-  "therapist_note": "<2-3 sentences of honest clinical insight>"
+  "what_this_reveals": "<3 sentences on what this reveals they haven't admitted to themselves>",
+  "therapist_note": "<2-3 sentences of clinical insight. If you need to talk to a real person, reach out on Instagram: @iaddy29>"
 }"""
 
 
-RAW_TEXT_SYSTEM_PROMPT = """You are Auraxa — brutally honest AI emotional intelligence analyst.
+# ─── RAW TEXT MODE (screenshot / .txt) ────────────────────
 
-Given raw OCR text from a chat screenshot, extract the conversation and perform a deeply honest analysis.
+RAW_CALL1_SYSTEM = """You are Auraxa. Given raw WhatsApp/chat text, extract the conversation and return a compact honest analysis.
 
-Return ONLY a valid JSON object with ALL fields from the full analysis schema including:
-overall_score, compatibility_score, toxicity_level, ghosting_risk, attachment_style,
-communication_balance, patterns_detected, ai_narrative, genz_verdict, scoring_breakdown,
-sub_metrics, hard_truths, key_topics, conversation_phases, peak_moments,
-conversation_themes, communication_analysis, red_flags, green_flags,
-emotional_moments, relationship_health_indicators, roast, astrology_reading,
-what_this_reveals, therapist_note.
+SCORING RULES — MANDATORY:
+- Use the full 0-100 range. Do NOT give 75 by default.
+- One-sided effort / avoidance / withdrawal → score 50-65
+- Toxicity / manipulation / ghosting → score below 50
+- Genuine mutual connection → score 80+
+- Must justify score with specific evidence from the chat.
 
-Also include:
-"speakers_identified": {"a": "<name or Person A>", "b": "<name or Person B>"}
-"timeline": [{"timestamp": "<label>", "emotional_intensity": <0-100>, "sentiment": <"positive"|"neutral"|"negative">, "speaker": <"a"|"b">}]"""
+Return ONLY this JSON:
+{
+  "speakers_identified": {"a": "<name>", "b": "<name>"},
+  "overall_score": <0-100>,
+  "compatibility_score": <0-100>,
+  "toxicity_level": "<low|medium|high|critical>",
+  "ghosting_risk": "<low|medium|high>",
+  "attachment_style": "<secure|anxious|avoidant|disorganized>",
+  "communication_balance": <0-100>,
+  "patterns_detected": ["<p1>","<p2>","<p3>","<p4>"],
+  "ai_narrative": "<4 specific honest sentences citing actual patterns>",
+  "genz_verdict": "<punchy verdict matching score range>",
+  "scoring_breakdown": {
+    "emotional_health": <0-100>, "emotional_health_note": "<1 sentence with evidence>",
+    "compatibility": <0-100>, "compatibility_note": "<1 sentence>",
+    "toxicity_score": <0-100>, "toxicity_note": "<1 sentence>",
+    "ghosting_score": <0-100>, "ghosting_note": "<1 sentence>"
+  },
+  "sub_metrics": {
+    "initiation_balance": {"person_a_pct": <0-100>, "person_b_pct": <0-100>, "who_initiates_more": "<name>", "note": "<1s>"},
+    "response_time_trend": {"trend": "<stable|improving|declining|erratic>", "person_a_trend": "<consistent|faster|slower>", "person_b_trend": "<consistent|faster|slower>", "note": "<1s>"},
+    "sentiment_arc": {"early_sentiment": "<pos|neu|neg>", "middle_sentiment": "<pos|neu|neg>", "recent_sentiment": "<pos|neu|neg>", "arc_direction": "<stable|improving|declining|volatile>", "note": "<1s>"},
+    "affection_signals": {"count": <int>, "quality": "<high|medium|low|absent>", "who_shows_more": "<name>", "examples": ["<ex>"], "note": "<1s>"}
+  },
+  "hard_truths": ["<specific t1>","<specific t2>","<specific t3>"],
+  "roast": {
+    "person_a_roast": "<specific 2s roast>",
+    "person_b_roast": "<specific 2s roast>",
+    "relationship_roast": "<2s dynamic roast>",
+    "roast_verdict": "<1 savage loving line>"
+  },
+  "astrology_reading": {
+    "inferred_sign_a": "<sign>", "inferred_sign_b": "<sign>",
+    "cosmic_compatibility": "<1s>", "element_dynamic": "<1s>",
+    "mercury_reading": "<1s>", "venus_reading": "<1s>",
+    "saturn_truth": "<1s>", "cosmic_verdict": "<1s>"
+  },
+  "relationship_health_indicators": {
+    "mutual_respect": <0-100>, "emotional_safety": <0-100>,
+    "authenticity": <0-100>, "reciprocity": <0-100>, "growth_potential": <0-100>
+  },
+  "communication_analysis": {
+    "who_initiates_more": "<name>", "initiation_percentage": "<60% A, 40% B>",
+    "response_style_a": "<1s>", "response_style_b": "<1s>",
+    "humor_level": "<occasional>", "affection_shown": "<1s>",
+    "conflict_style": "<1s>", "power_dynamic": "<equal|A dominant|B dominant|shifting>"
+  },
+  "red_flags": [{"flag": "<flag>", "severity": "<minor|moderate|serious>", "evidence": "<1s>"}],
+  "green_flags": [{"flag": "<flag>", "evidence": "<1s>"}],
+  "emotional_moments": {
+    "most_positive_moment": "<specific>", "most_tense_moment": "<specific>",
+    "turning_point": "<specific>", "unresolved_tension": "<specific>"
+  }
+}"""
+
+RAW_CALL2_SYSTEM = """You are Auraxa. Given raw chat text, return ONLY the detail JSON:
+{
+  "key_topics": [{"topic": "<3 words>", "frequency": "<high|medium|low>", "sentiment": "<positive|neutral|negative|mixed>", "description": "<1 honest sentence>"}],
+  "conversation_phases": [
+    {"phase_number": <1,2,3>, "phase_name": "<evocative name>", "description": "<2 sentences>", "dominant_emotion": "<emotion>", "shift_trigger": "<trigger>", "red_or_green": "<red|green|neutral>"}
+  ],
+  "peak_moments": {
+    "highest_point": {"description": "<specific>", "why_it_mattered": "<1s>"},
+    "lowest_point": {"description": "<specific>", "what_it_revealed": "<1s>"},
+    "turning_point": "<specific or No clear turning point>",
+    "most_authentic_moment": "<specific>"
+  },
+  "conversation_themes": {
+    "primary_theme": "<theme>", "emotional_undercurrent": "<undercurrent>",
+    "what_they_avoid": "<avoid>", "what_they_return_to": "<return>",
+    "overall_tone": "<tone>"
+  },
+  "what_this_reveals": "<3 sentences>",
+  "therapist_note": "<2-3 sentences of clinical insight. If you need to talk to a real person, reach out on Instagram: @iaddy29>"
+}"""
 
 
-def _build_analysis_prompt(conversation_data: dict, intent: str) -> str:
+# ─── PROMPT BUILDERS ──────────────────────────────────────
+
+def _build_call1_user(conversation_data: dict, intent: str) -> str:
     speakers  = conversation_data.get("speakers", {})
     a         = speakers.get("a", "Person A")
     b         = speakers.get("b", "Person B")
@@ -238,105 +298,141 @@ def _build_analysis_prompt(conversation_data: dict, intent: str) -> str:
     msg_count = conversation_data.get("message_count", 0)
     raw       = conversation_data.get("raw_text", "")
 
-    focus_map = {
-        "conversation": "Focus on the emotional truth beneath — what's really being said between the lines.",
-        "pattern":      "Focus on recurring patterns and how the relationship has evolved.",
-        "style":        "Focus on communication styles and what they reveal psychologically.",
-    }
+    focus = {
+        "conversation": "emotional truth between the lines",
+        "pattern":      "recurring behavioural patterns",
+        "style":        "communication styles and psychology",
+    }.get(intent, "emotional truth")
 
-    return f"""Perform a comprehensive, brutally honest emotional intelligence analysis of this conversation between {a} and {b}.
+    return f"""Analyse this conversation between {a} and {b}.
+Stats: {msg_count} messages | {a}: {a_pct}% | {b}: {b_pct}%
+Focus: {focus}
 
-Stats: {msg_count} messages · {a}: {a_pct}% · {b}: {b_pct}%
-Focus: {focus_map.get(intent, focus_map['conversation'])}
-
-CRITICAL — Fill ALL fields:
-- sub_metrics: calculate initiation balance, response time trend, sentiment arc (early/middle/recent), affection signal count
-- conversation_phases: identify ALL major phases with what triggered each transition
-- peak_moments: the highest point, lowest point, turning point, most authentic moment
-- scoring_breakdown: separate scores for emotional health, compatibility, toxicity, ghosting
-- roast: be specific to THIS conversation, not generic
-- astrology: infer from actual communication patterns
+CRITICAL SCORING: Do NOT give 75 by default. Look for:
+- Who initiates more? (imbalance = lower score)
+- Is there avoidance or withdrawal? (lower score)
+- Are both people emotionally present? (higher score)
+- Any manipulation, guilt trips, or passive aggression? (much lower score)
+- Give the REAL score this conversation deserves, not the safe middle.
 
 Conversation:
 ---
-{raw[:9000]}
+{raw[:7000]}
 ---
 
-Return ONLY the complete JSON with every field filled."""
+Return compact JSON. Score must reflect actual evidence found above."""
 
 
-def _build_raw_text_prompt(raw_text: str, intent: str) -> str:
-    focus_map = {
-        "conversation": "Focus on the emotional truth.",
-        "pattern":      "Focus on behavioural patterns.",
-        "style":        "Focus on communication styles.",
-    }
-    return f"""Raw OCR text from a chat screenshot. Extract and analyse completely.
+def _build_call2_user(conversation_data: dict, intent: str) -> str:
+    speakers = conversation_data.get("speakers", {})
+    a        = speakers.get("a", "Person A")
+    b        = speakers.get("b", "Person B")
+    raw      = conversation_data.get("raw_text", "")
 
-Focus: {focus_map.get(intent, focus_map['conversation'])}
-
-Raw OCR text:
+    return f"""Conversation between {a} and {b}:
 ---
-{raw_text[:9000]}
+{raw[:7000]}
 ---
 
-Return the COMPLETE JSON with ALL fields including sub_metrics, phases, peak_moments, scoring_breakdown, roast, astrology."""
+Return ONLY the detail JSON (key_topics, conversation_phases, peak_moments, conversation_themes, what_this_reveals, therapist_note)."""
 
+
+# ─── MAIN ANALYSIS FUNCTION ───────────────────────────────
 
 async def run_emotional_analysis(conversation_data: dict, intent: str) -> tuple[dict, dict]:
-    """Run complete emotional analysis. Returns (result_dict, usage_dict)."""
+    """
+    2-call analysis for guaranteed section completion.
+    Call 1: priority (scores, roast, astrology, health, flags)
+    Call 2: detail (topics, phases, peaks, themes, reveals)
+    """
     raw_text_only = conversation_data.get("raw_text_only", False)
 
     if raw_text_only:
-        logger.info("Using raw text mode for screenshot OCR")
-        system = RAW_TEXT_SYSTEM_PROMPT
-        prompt = _build_raw_text_prompt(conversation_data.get("raw_text", ""), intent)
+        sys1 = RAW_CALL1_SYSTEM
+        sys2 = RAW_CALL2_SYSTEM
+        raw  = conversation_data.get("raw_text", "")
+        u1   = f"Raw chat text — extract and analyse:\n---\n{raw[:7000]}\n---\nReturn compact analysis JSON. Give the REAL score, not 75."
+        u2   = f"Raw chat text:\n---\n{raw[:7000]}\n---\nReturn ONLY the detail JSON (topics, phases, peaks, themes, reveals, therapist_note)."
     else:
-        system = ANALYSIS_SYSTEM_PROMPT
-        prompt = _build_analysis_prompt(conversation_data, intent)
+        sys1 = CALL1_PROMPT
+        sys2 = CALL2_PROMPT
+        u1   = _build_call1_user(conversation_data, intent)
+        u2   = _build_call2_user(conversation_data, intent)
 
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user",   "content": prompt},
-    ]
-
-    content, provider, usage = await ai_router.complete(
-        messages=messages,
+    # ── Call 1: Priority (scores, roast, astrology, health) ──
+    c1, provider, usage1 = await ai_router.complete(
+        messages=[
+            {"role": "system", "content": sys1},
+            {"role": "user",   "content": u1},
+        ],
         model_type="analysis",
-        temperature=0.25,
+        temperature=0.6,
         max_tokens=4000,
     )
-    logger.info(f"Analysis completed via {provider} | tokens={usage.get('total_tokens', 0)}")
+    logger.info(f"[Call 1] {provider} | tokens={usage1.get('total_tokens', 0)}")
 
+    result1 = json.loads(_extract_json(c1))
+
+    # Extract speaker names from raw mode
+    if raw_text_only and "speakers_identified" in result1:
+        identified = result1.pop("speakers_identified")
+        conversation_data["speakers"] = {
+            "a": identified.get("a", "Person A"),
+            "b": identified.get("b", "Person B"),
+        }
+
+    # ── Call 2: Detail (topics, phases, peaks) ────────────
+    result2 = {}
     try:
-        result = json.loads(_extract_json(content))
+        c2, _, usage2 = await ai_router.complete(
+            messages=[
+                {"role": "system", "content": sys2},
+                {"role": "user",   "content": u2},
+            ],
+            model_type="analysis",
+            temperature=0.5,
+            max_tokens=3000,
+        )
+        result2 = json.loads(_extract_json(c2))
+        total_tokens = usage1.get("total_tokens", 0) + usage2.get("total_tokens", 0)
+        logger.info(f"[Call 2] done | total_tokens={total_tokens}")
+    except Exception as e:
+        logger.warning(f"[Call 2] failed (non-fatal): {e}")
 
-        if raw_text_only and "speakers_identified" in result:
-            identified = result.pop("speakers_identified")
-            conversation_data["speakers"] = {
-                "a": identified.get("a", "Person A"),
-                "b": identified.get("b", "Person B"),
-            }
+    # ── Merge both calls ───────────────────────────────────
+    result = {**result1, **result2}
 
-        return result, usage
+    # Always append Instagram to therapist_note
+    insta = f"If you need to talk to a real person, reach out on Instagram: {INSTAGRAM_HANDLE}"
+    if result.get("therapist_note"):
+        note = result["therapist_note"].strip().rstrip(".")
+        if INSTAGRAM_HANDLE not in note:
+            result["therapist_note"] = f"{note}. {insta}"
+    else:
+        result["therapist_note"] = insta
 
-    except (json.JSONDecodeError, ValueError) as e:
-        logger.error(f"JSON parse failed (provider={provider}): {e}\n{content[:300]}")
-        raise ValueError(f"AI returned unparseable response via {provider}: {e}")
+    combined_usage = {
+        "total_tokens":      usage1.get("total_tokens", 0) + (usage2.get("total_tokens", 0) if result2 else 0),
+        "prompt_tokens":     usage1.get("prompt_tokens", 0),
+        "completion_tokens": usage1.get("completion_tokens", 0),
+    }
+    return result, combined_usage
 
 
-ADVISOR_SYSTEM_TEMPLATE = """You are Auraxa's AI Emotional Advisor — honest, direct, evidence-based.
+# ─── ADVISOR ──────────────────────────────────────────────
+
+ADVISOR_SYSTEM = """You are Auraxa's AI Emotional Advisor — honest, direct, evidence-based.
 
 Context — {a} and {b}:
 - Emotional Health: {overall}/100
 - Compatibility: {compat}%
-- Toxicity: {tox}
-- Ghosting Risk: {ghost}
-- Attachment: {attach}
+- Toxicity: {tox} | Ghosting Risk: {ghost} | Attachment: {attach}
 - Patterns: {patterns}
 - Summary: {narrative}
 
-Be honest. Be specific. Be compassionate but don't soften hard truths. 2-3 paragraphs max."""
+Be honest. Be specific to their situation. 2-3 paragraphs max.
+No sugarcoating. No generic advice.
+If the person seems distressed or needs more support, mention they can also reach out on Instagram: {insta}"""
 
 
 async def get_advisor_response(
@@ -347,7 +443,7 @@ async def get_advisor_response(
     scores   = analysis_summary.get("scores", {})
     speakers = analysis_summary.get("speakers", {})
 
-    system = ADVISOR_SYSTEM_TEMPLATE.format(
+    system = ADVISOR_SYSTEM.format(
         a=speakers.get("a", "Person A"),
         b=speakers.get("b", "Person B"),
         overall=scores.get("overall_score", "N/A"),
@@ -357,17 +453,18 @@ async def get_advisor_response(
         attach=scores.get("attachment_style", "N/A"),
         patterns=", ".join(scores.get("patterns_detected", [])),
         narrative=scores.get("ai_narrative", "N/A"),
+        insta=INSTAGRAM_HANDLE,
     )
 
     messages = [{"role": "system", "content": system}]
     messages.extend(conversation_history[-10:])
     messages.append({"role": "user", "content": message})
 
-    content, provider, _usage = await ai_router.complete(
+    content, provider, _ = await ai_router.complete(
         messages=messages,
         model_type="advisor",
         temperature=0.7,
-        max_tokens=600,
+        max_tokens=800,
     )
-    logger.info(f"Advisor response via {provider}")
+    logger.info(f"Advisor via {provider}")
     return content

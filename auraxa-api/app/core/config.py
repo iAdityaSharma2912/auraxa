@@ -82,6 +82,13 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "onboarding@resend.dev"
     FRONTEND_URL: str = "http://localhost:3000"
+
+    PHONEPE_MERCHANT_ID: str = "PGTESTPAYUAT"
+    PHONEPE_SALT_KEY: str    = "099eb0cd-02cf-4dc2-a4cf-292ef5eedf84"
+    PHONEPE_SALT_INDEX: str  = "1"
+    PHONEPE_ENV: str         = "sandbox"   # "production" karo jab live ho
+    FRONTEND_URL: str        = "http://localhost:3000"
+    BACKEND_URL: str         = "http://localhost:8000"
     
     class Config:
         env_file = ".env"

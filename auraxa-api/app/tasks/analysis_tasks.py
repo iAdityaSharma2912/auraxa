@@ -187,7 +187,11 @@ async def _run_pipeline(analysis_id: str, file_paths: list, input_type: str, int
 
                 # ── Stage 2: OCR / structure ──────────────
                 logger.info(f"[{analysis_id}] Stage 2: Structuring from {len(file_paths)} file(s)")
-                conv_data = structure_conversation(file_paths, input_type)
+                if input_type in ("text", "paste") and file_paths:
+                    from app.services.ocr_service_patch import process_text_file
+                    conv_data = process_text_file(file_paths[0])
+                else:
+                    conv_data = structure_conversation(file_paths, input_type)
                 raw_text_only = conv_data.get("raw_text_only", False)
 
                 if raw_text_only:
@@ -213,6 +217,8 @@ async def _run_pipeline(analysis_id: str, file_paths: list, input_type: str, int
                 # ── Stage 3: AI analysis ──────────────────
                 logger.info(f"[{analysis_id}] Stage 3: Running AI analysis")
                 ai_result, ai_usage = await run_emotional_analysis(conv_data, intent)
+                from app.tasks.normalize_ai_result import normalize  # ← ADD
+                ai_result = normalize(ai_result)                     # ← ADD
 
                 if raw_text_only and conv_data.get("speakers") != {"a": "Person A", "b": "Person B"}:
                     analysis.speakers = conv_data["speakers"]
