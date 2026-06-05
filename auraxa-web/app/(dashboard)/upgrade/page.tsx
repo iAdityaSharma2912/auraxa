@@ -1,270 +1,304 @@
 "use client";
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
-import api from "@/lib/api";
-import { toast } from "sonner";
 
-declare global {
-  interface Window { Razorpay: any; }
-}
+import { motion } from "framer-motion";
 
 const PLANS = [
   {
     id: "free",
     name: "Free",
-    price: "₹0",
-    period: "forever",
-    highlight: false,
-    cta: "Current Plan",
+    price: 0,
+    analyses: "3 / month",
     features: [
-      "3 analyses / month",
-      "Basic emotional insights",
+      "3 analyses per month",
+      "Basic emotional scores",
       "Gen Z score cards",
-      "Astrology from chat",
+      "Hard truths section",
     ],
+    current: true,
   },
   {
     id: "premium",
     name: "Premium",
-    price: "₹299",
-    period: "per month",
+    price: 299,
+    analyses: "20 / month",
     highlight: true,
-    cta: "Upgrade to Premium",
     features: [
-      "20 analyses / month",
-      "Full emotional intelligence report",
-      "Birth chart compatibility",
-      "Palm reading",
-      "AI Advisor (50 messages)",
-      "Priority processing",
+      "20 analyses per month",
+      "Full deep report (all sections)",
+      "Scoring breakdown + sub-metrics",
+      "Conversation phases & peak moments",
+      "Roast + Astrology reading",
+      "AI Advisor (50 msgs/month)",
+      "PDF download",
     ],
   },
   {
     id: "pro",
     name: "Pro",
-    price: "₹599",
-    period: "per month",
-    highlight: false,
-    cta: "Go Pro",
+    price: 599,
+    analyses: "Unlimited",
     features: [
       "Unlimited analyses",
       "Everything in Premium",
       "Unlimited AI Advisor",
-      "Relationship timeline export",
-      "Download full reports",
+      "Priority processing",
       "Early access to new features",
     ],
   },
 ];
 
-function CheckIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-      stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 6L9 17l-5-5"/>
-    </svg>
-  );
-}
-
-function SuccessModal({ plan, onClose }: { plan: string; onClose: () => void }) {
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ background: "rgba(0,0,0,.5)", backdropFilter: "blur(4px)" }}>
-      <motion.div initial={{ opacity: 0, scale: .92, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: .3, ease: [.16,1,.3,1] }}
-        className="card p-8 text-center max-w-sm w-full">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
-          style={{ background: "var(--pri-soft)" }}>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-            stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-            <polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-        </div>
-        <h2 className="font-display text-xl font-bold mb-2" style={{ color: "var(--text)" }}>
-          You're on {plan.charAt(0).toUpperCase() + plan.slice(1)}!
-        </h2>
-        <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-          Your account has been upgraded. All premium features are now unlocked.
-        </p>
-        <button onClick={onClose} className="btn btn-primary w-full">
-          Start Analysing →
-        </button>
-      </motion.div>
-    </motion.div>
-  );
-}
-
 export default function UpgradePage() {
-  const router = useRouter();
-  const [loading, setLoading]         = useState<string | null>(null);
-  const [currentTier, setCurrentTier] = useState("free");
-  const [showSuccess, setShowSuccess] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.get("/api/subscriptions/status")
-      .then(r => setCurrentTier(r.data.tier))
-      .catch(() => {});
-  }, []);
-
-  const loadRazorpay = (): Promise<boolean> => {
-    return new Promise(resolve => {
-      if (window.Razorpay) { resolve(true); return; }
-      const s = document.createElement("script");
-      s.src = "https://checkout.razorpay.com/v1/checkout.js";
-      s.onload  = () => resolve(true);
-      s.onerror = () => resolve(false);
-      document.body.appendChild(s);
-    });
-  };
-
-  const handleUpgrade = async (planId: string) => {
-    if (planId === "free" || planId === currentTier) return;
-    setLoading(planId);
-
-    try {
-      // Step 1 — load Razorpay script
-      const loaded = await loadRazorpay();
-      if (!loaded) { toast.error("Could not load payment gateway. Check your connection."); return; }
-
-      // Step 2 — create order on backend
-      const orderRes = await api.post("/api/subscriptions/create-order", { plan: planId });
-      const { order_id, amount, currency, plan_name, key_id, prefill } = orderRes.data;
-
-      // Step 3 — open Razorpay checkout
-      await new Promise<void>((resolve, reject) => {
-        const rzp = new window.Razorpay({
-          key:         key_id,
-          amount:      amount,
-          currency:    currency,
-          name:        "Auraxa",
-          description: plan_name,
-          order_id:    order_id,
-          prefill,
-          theme:       { color: "#6c55e0" },
-          modal: {
-            ondismiss: () => reject(new Error("dismissed")),
-          },
-          handler: async (response: any) => {
-            try {
-              // Step 4 — verify on backend
-              await api.post("/api/subscriptions/verify", {
-                razorpay_order_id:   response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature:  response.razorpay_signature,
-              });
-              setCurrentTier(planId);
-              setShowSuccess(planId);
-              resolve();
-            } catch (e) {
-              reject(e);
-            }
-          },
-        });
-        rzp.open();
-      });
-
-    } catch (e: any) {
-      if (e?.message !== "dismissed") {
-        toast.error(e?.response?.data?.detail || "Payment failed. Please try again.");
-      }
-    } finally {
-      setLoading(null);
-    }
+  const copyEmail = () => {
+    navigator.clipboard.writeText("imaddy2912@gmail.com");
   };
 
   return (
-    <div className="px-3 sm:px-5 md:px-8 py-4 md:py-8 max-w-4xl">
+    <div className="px-3 sm:px-5 md:px-8 py-4 md:py-8 max-w-3xl">
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
-        <p className="label mb-3" style={{ fontSize: "9px", color: "var(--primary)" }}>Plans</p>
-        <h1 className="font-display font-bold mb-2" style={{ fontSize: "clamp(1.5rem,5vw,2.2rem)", color: "var(--text)" }}>
-          Choose Your Path
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center mb-8"
+      >
+        <p className="label mb-2" style={{ fontSize: "10px", color: "var(--primary)" }}>
+          PLANS & PRICING
+        </p>
+        <h1
+          className="font-display font-bold mb-2"
+          style={{ fontSize: "clamp(1.5rem,5vw,2rem)", color: "var(--text)" }}
+        >
+          Upgrade Auraxa
         </h1>
         <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Unlock deeper insights into your relationships.
+          Online payments coming soon. Reach out for early access.
         </p>
       </motion.div>
 
+      {/* Coming Soon Banner */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="rounded-xl p-5 mb-8 text-center"
+        style={{
+          background: "linear-gradient(135deg, #1e1a2e, #2d1b69)",
+          border: "1px solid #6c55e0",
+        }}
+      >
+        <div
+          className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-3"
+          style={{ background: "rgba(108,85,224,.25)", border: "1px solid #6c55e0" }}
+        >
+          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#9b8cf0" }} />
+          <span className="font-mono text-xs font-bold" style={{ color: "#9b8cf0" }}>
+            PAYMENT GATEWAY — COMING SOON
+          </span>
+        </div>
+
+        <p className="text-sm mb-4 leading-relaxed" style={{ color: "rgba(255,255,255,.75)" }}>
+          Online payments are being set up. Until then, reach out directly to
+          get premium access with a promo code.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          {/* Email */}
+          <button
+            onClick={copyEmail}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all"
+            style={{
+              background: "rgba(255,255,255,.08)",
+              border: "1px solid rgba(255,255,255,.15)",
+              color: "#fff",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+            </svg>
+            imaddy2912@gmail.com
+          </button>
+
+          {/* Instagram */}
+          <a
+            href="https://instagram.com/iaddy29"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all"
+            style={{
+              background: "linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)",
+              color: "#fff",
+              fontSize: "13px",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <rect x="2" y="2" width="20" height="20" rx="5" />
+              <circle cx="12" cy="12" r="4" />
+              <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+            </svg>
+            @iaddy29
+          </a>
+        </div>
+
+        <p className="text-xs mt-3" style={{ color: "rgba(255,255,255,.4)" }}>
+          Click email to copy · DM on Instagram for promo code
+        </p>
+      </motion.div>
+
+      {/* Plan Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        {PLANS.map((plan, i) => {
-          const isCurrent = plan.id === currentTier;
-          const isLoading = loading === plan.id;
-          return (
-            <motion.div key={plan.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.08 }}>
-              <div className="card p-5 h-full flex flex-col relative"
-                style={plan.highlight ? { border: "2px solid var(--primary)", boxShadow: "var(--shadow-lg)" } : {}}>
-
-                {plan.highlight && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded font-display font-bold"
-                    style={{ background: "var(--primary)", color: "#fff", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                    Most Popular
-                  </span>
-                )}
-
-                {isCurrent && (
-                  <span className="absolute -top-3 right-4 px-3 py-1 rounded font-mono font-bold"
-                    style={{ background: "var(--green)", color: "#fff", fontSize: "9px" }}>
-                    Current
-                  </span>
-                )}
-
-                <p className="font-display font-bold text-lg mb-1" style={{ color: "var(--text)" }}>{plan.name}</p>
-                <div className="flex items-baseline gap-1 mb-5">
-                  <span className="font-display font-bold" style={{ fontSize: "1.875rem", color: "var(--text)" }}>{plan.price}</span>
-                  <span className="text-xs" style={{ color: "var(--muted)" }}>/ {plan.period}</span>
-                </div>
-
-                <ul className="space-y-2.5 mb-6 flex-1">
-                  {plan.features.map(f => (
-                    <li key={f} className="flex items-start gap-2.5">
-                      <span className="mt-0.5 flex-shrink-0"><CheckIcon/></span>
-                      <span className="text-sm" style={{ color: "var(--muted)" }}>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <button
-                  onClick={() => handleUpgrade(plan.id)}
-                  disabled={plan.id === "free" || isCurrent || isLoading}
-                  className={plan.highlight ? "btn btn-primary w-full" : "btn btn-secondary w-full"}
-                  style={(plan.id === "free" || isCurrent) ? { opacity: 0.5, cursor: "default" } : {}}>
-                  {isLoading
-                    ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
-                    : isCurrent ? "Current Plan" : plan.cta}
-                </button>
+        {PLANS.map((plan, i) => (
+          <motion.div
+            key={plan.id}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 + 0.2 }}
+            className="relative"
+          >
+            {plan.highlight && (
+              <div
+                className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded font-display font-bold whitespace-nowrap"
+                style={{ background: "var(--primary)", color: "#fff", fontSize: "9px", letterSpacing: "0.1em" }}
+              >
+                MOST POPULAR
               </div>
-            </motion.div>
-          );
-        })}
-      </div>
+            )}
 
-      {/* Trust badges */}
-      <div className="flex items-center justify-center gap-6 flex-wrap">
-        {[
-          { icon: "🔒", text: "Secured by Razorpay" },
-          { icon: "↩", text: "Cancel anytime" },
-          { icon: "🇮🇳", text: "₹ Indian pricing" },
-        ].map(b => (
-          <div key={b.text} className="flex items-center gap-2">
-            <span style={{ fontSize: "14px" }}>{b.icon}</span>
-            <span className="label" style={{ fontSize: "9px" }}>{b.text}</span>
-          </div>
+            <div
+              className="card p-5 h-full flex flex-col"
+              style={plan.highlight ? { border: "2px solid var(--primary)", boxShadow: "0 4px 24px rgba(108,85,224,.12)" } : {}}
+            >
+              {/* Plan name */}
+              <div className="mb-3">
+                <span
+                  className="inline-flex items-center px-2.5 py-1 rounded font-display font-bold text-xs"
+                  style={{
+                    background: plan.highlight ? "var(--pri-soft)" : "var(--surface-alt)",
+                    color: plan.highlight ? "var(--primary)" : "var(--muted)",
+                    border: `1px solid ${plan.highlight ? "var(--pri-border)" : "var(--line)"}`,
+                  }}
+                >
+                  {plan.name}
+                </span>
+              </div>
+
+              {/* Price */}
+              <div className="flex items-baseline gap-1 mb-1">
+                <span
+                  className="font-display font-bold"
+                  style={{ fontSize: "1.8rem", color: "var(--text)" }}
+                >
+                  {plan.price === 0 ? "Free" : `₹${plan.price}`}
+                </span>
+                {plan.price > 0 && (
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>/ month</span>
+                )}
+              </div>
+              <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+                {plan.analyses} analyses
+              </p>
+
+              {/* Features */}
+              <ul className="space-y-2 mb-6 flex-1">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2">
+                    <svg
+                      width="12" height="12" viewBox="0 0 24 24" fill="none"
+                      stroke={plan.highlight ? "var(--primary)" : "var(--green)"}
+                      strokeWidth="2.5" strokeLinecap="round"
+                      className="flex-shrink-0 mt-0.5"
+                    >
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                    <span className="text-xs" style={{ color: "var(--muted)" }}>{f}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* CTA */}
+              {plan.current ? (
+                <div
+                  className="w-full py-3 rounded text-center font-display font-bold text-xs"
+                  style={{ background: "var(--surface-alt)", color: "var(--muted)" }}
+                >
+                  Current Plan
+                </div>
+              ) : (
+                <a
+                  href="https://instagram.com/iaddy29"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 rounded text-center font-display font-bold text-xs block"
+                  style={{
+                    background: plan.highlight ? "var(--primary)" : "var(--surface-alt)",
+                    color: plan.highlight ? "#fff" : "var(--text)",
+                    textDecoration: "none",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Get Promo Code →
+                </a>
+              )}
+            </div>
+          </motion.div>
         ))}
       </div>
 
-      {/* Success modal */}
-      <AnimatePresence>
-        {showSuccess && (
-          <SuccessModal
-            plan={showSuccess}
-            onClose={() => { setShowSuccess(null); router.push("/dashboard"); }}
-          />
-        )}
-      </AnimatePresence>
+      {/* How to get access */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="card p-5"
+      >
+        <p className="label mb-4" style={{ fontSize: "9px" }}>HOW TO GET PREMIUM ACCESS</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            {
+              step: "1",
+              title: "DM on Instagram",
+              desc: "Message @iaddy29 on Instagram or email imaddy2912@gmail.com",
+            },
+            {
+              step: "2",
+              title: "Get Promo Code",
+              desc: "You'll receive a promo code for the plan you want.",
+            },
+            {
+              step: "3",
+              title: "Instant Access",
+              desc: "Your account gets upgraded immediately. Full access, all sections.",
+            },
+          ].map((s) => (
+            <div key={s.step} className="flex gap-3">
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-display font-bold text-xs"
+                style={{
+                  background: "var(--pri-soft)",
+                  border: "1px solid var(--pri-border)",
+                  color: "var(--primary)",
+                }}
+              >
+                {s.step}
+              </div>
+              <div>
+                <p className="font-display font-bold text-sm mb-0.5" style={{ color: "var(--text)" }}>
+                  {s.title}
+                </p>
+                <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+                  {s.desc}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
     </div>
   );
 }
+
